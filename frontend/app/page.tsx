@@ -40,7 +40,7 @@ export default function VentureDashboard() {
   const [messages, setMessages] = useState([
     { 
       role: "assistant", 
-      content: "Hello! I am Venture.ai, your live Gemini-powered startup strategic advisor. Sign in to save your history, upload financial sheets, or ask me anything about your unit economics." 
+      content: "Hello! I am Venture.ai, your live startup strategic advisor. Sign in to save your history, upload financial sheets, or ask me anything about your unit economics." 
     }
   ]);
   const [input, setInput] = useState("");
@@ -334,7 +334,7 @@ export default function VentureDashboard() {
             type="text"
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder={isRecording ? "Recording voice note..." : "Ask Gemini advisor..."}
+            placeholder={isRecording ? "Recording voice note..." : "Ask venture.Ai..."}
             disabled={isRecording}
             className="flex-1 bg-slate-900/80 border border-purple-500/30 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/50 transition-all text-white placeholder-slate-500"
           />
