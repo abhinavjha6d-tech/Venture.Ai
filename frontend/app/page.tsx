@@ -69,11 +69,7 @@ export default function Home() {
     try {
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
       if (!apiKey) {
-        setMessages(prev => [
-          ...prev,
-          { role: "assistant", content: "Configuration Error: Please add your NEXT_PUBLIC_GEMINI_API_KEY to your .env.local file." }
-        ]);
-        return;
+        throw new Error("NEXT_PUBLIC_GEMINI_API_KEY is missing or not exposed to the browser.");
       }
 
       // Format conversation history for Gemini API
@@ -92,21 +88,30 @@ export default function Home() {
         parts: [{ text: "Understood. I am Venture.ai, your dedicated startup strategic advisor ready to brainstorm ideas, evaluate markets, and scale your business." }]
       });
 
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      // Updated endpoint to use the active gemini-3.6-flash model
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents })
       });
 
       const data = await response.json();
-      const aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Let's dive deeper into your startup metrics or explore new business angles!";
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || `API Error status: ${response.status}`);
+      }
+
+      const aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!aiReply) {
+        throw new Error("Received empty text response from Gemini API.");
+      }
 
       setMessages(prev => [...prev, { role: "assistant", content: aiReply }]);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Gemini API Error:", err);
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "Sorry, I had trouble connecting to the AI brain. Please check your internet connection or API key." }
+        { role: "assistant", content: `⚠️ Debug Error: ${err.message}` }
       ]);
     }
   };
