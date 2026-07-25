@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useRef } from "react";
-import { Paperclip, Mic, Square, Send, X } from "lucide-react";
+import { Paperclip, Mic, Square, Send, X, TrendingUp } from "lucide-react";
 
 export default function Home() {
   const [input, setInput] = useState("");
@@ -21,7 +21,6 @@ export default function Home() {
   const [activeUsers, setActiveUsers] = useState(500);
   const [cac, setCac] = useState(50);
   const [arpu, setArpu] = useState(100);
-  const [lifespan, setLifespan] = useState(12);
 
   const startRecording = async () => {
     audioChunksRef.current = [];
@@ -68,7 +67,7 @@ export default function Home() {
     setTimeout(() => {
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "I've analyzed your input and updated your projections. Let's optimize your unit economics further!" }
+        { role: "assistant", content: "I's analyzed your input and updated your projections. Let's optimize your unit economics further!" }
       ]);
     }, 1000);
   };
@@ -169,9 +168,15 @@ export default function Home() {
           </form>
         </div>
 
-        {/* Right Dashboard Area: Unit Economics Simulator & Metrics */}
+        {/* Right Dashboard Area: Telemetry, Graph & Simulator */}
         <div className="lg:col-span-7 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)] pr-2">
-          {/* Top Metrics Grid */}
+          {/* Executive Header Card */}
+          <div className="bg-slate-900/40 border border-purple-900/30 rounded-2xl p-6 backdrop-blur-xl shadow-2xl">
+            <h1 className="text-2xl font-bold tracking-tight text-white mb-1">Executive Intelligence & Growth</h1>
+            <p className="text-sm text-slate-400">Real-time telemetry and AI-backed ROI projections.</p>
+          </div>
+
+          {/* Top Metrics Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-slate-900/40 border border-purple-900/30 p-4 rounded-2xl backdrop-blur-xl shadow-lg">
               <p className="text-xs text-slate-400 mb-1">Target MRR</p>
@@ -191,8 +196,33 @@ export default function Home() {
             </div>
           </div>
 
+          {/* Revenue Trajectory Graph Section */}
+          <div className="bg-slate-900/40 border border-purple-900/30 rounded-2xl p-6 backdrop-blur-xl shadow-2xl space-y-4">
+            <div className="flex items-center gap-2 text-purple-300 font-semibold text-sm">
+              <TrendingUp className="w-4 h-4 text-purple-400" />
+              <span>Revenue Trajectory (₹)</span>
+            </div>
+            <div className="h-48 w-full relative flex items-end justify-between px-2 pt-6 border-b border-l border-purple-900/50">
+              {/* Background gradient curve simulation */}
+              <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none" preserveAspectRatio="none" viewBox="0 0 500 150">
+                <defs>
+                  <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#a855f7" stopOpacity="0.4" />
+                    <stop offset="100%" stopColor="#a855f7" stopOpacity="0.0" />
+                  </linearGradient>
+                </defs>
+                <path d="M 0 120 Q 150 90, 250 60 T 500 10" fill="none" stroke="#c084fc" strokeWidth="3" />
+                <path d="M 0 120 Q 150 90, 250 60 T 500 10 L 500 150 L 0 150 Z" fill="url(#chartGradient)" />
+              </svg>
+              {/* X-axis months */}
+              <div className="absolute bottom-[-24px] left-0 right-0 flex justify-between text-xs text-slate-500 px-1">
+                <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span>
+              </div>
+            </div>
+          </div>
+
           {/* Unit Economics Simulator Panel */}
-          <div className="bg-slate-900/40 border border-purple-900/30 rounded-2xl p-6 backdrop-blur-xl shadow-2xl space-y-5">
+          <div className="bg-slate-900/40 border border-purple-900/30 rounded-2xl p-6 backdrop-blur-xl shadow-2xl space-y-5 pt-8">
             <h2 className="text-base font-semibold text-purple-300 flex items-center gap-2">
               📊 Unit Economics Simulator
             </h2>
