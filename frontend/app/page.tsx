@@ -16,6 +16,13 @@ export default function Home() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
+  // Simulator states
+  const [targetMrr, setTargetMrr] = useState(10000);
+  const [activeUsers, setActiveUsers] = useState(500);
+  const [cac, setCac] = useState(50);
+  const [arpu, setArpu] = useState(100);
+  const [lifespan, setLifespan] = useState(12);
+
   const startRecording = async () => {
     audioChunksRef.current = [];
     try {
@@ -61,18 +68,21 @@ export default function Home() {
     setTimeout(() => {
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "I've analyzed your input. Let's optimize your unit economics and growth strategy further!" }
+        { role: "assistant", content: "I've analyzed your input and updated your projections. Let's optimize your unit economics further!" }
       ]);
     }, 1000);
   };
 
   return (
     <main className="min-h-screen bg-slate-950 text-white flex flex-col">
+      {/* Top Header with Logo */}
       <header className="w-full px-6 py-4 flex items-center justify-between border-b border-purple-900/30 bg-slate-900/50 backdrop-blur-md">
         <div className="flex items-center gap-3">
-          <div className="h-8 w-8 rounded-xl bg-gradient-to-tr from-blue-600 to-pink-600 flex items-center justify-center font-bold text-lg shadow-lg shadow-purple-500/20">
-            V
-          </div>
+          <img 
+            src="/logo.png" 
+            alt="Venture.ai Logo" 
+            className="h-8 w-8 rounded-xl object-cover shadow-lg shadow-purple-500/20" 
+          />
           <span className="font-semibold text-lg tracking-wide">Venture.ai</span>
         </div>
         <button className="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition-all shadow-lg shadow-purple-500/20 cursor-pointer">
@@ -80,7 +90,9 @@ export default function Home() {
         </button>
       </header>
 
+      {/* Main Split Layout */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6">
+        {/* Left Sidebar: Chat Interface */}
         <div className="lg:col-span-5 bg-slate-900/40 border border-purple-900/30 rounded-2xl flex flex-col h-[calc(100vh-140px)] backdrop-blur-xl overflow-hidden shadow-2xl">
           <div className="p-4 border-b border-purple-900/30 flex items-center justify-between bg-slate-950/40">
             <h2 className="text-sm font-semibold tracking-wide text-purple-300">Strategic Advisor Chat</h2>
@@ -157,10 +169,99 @@ export default function Home() {
           </form>
         </div>
 
-        <div className="lg:col-span-7 space-y-6">
-          <div className="bg-slate-900/40 border border-purple-900/30 rounded-2xl p-6 backdrop-blur-xl shadow-2xl">
-            <h1 className="text-2xl font-bold tracking-tight text-white mb-1">Executive Intelligence & Growth</h1>
-            <p className="text-sm text-slate-400">Real-time telemetry and advanced AI-backed ROI projections.</p>
+        {/* Right Dashboard Area: Unit Economics Simulator & Metrics */}
+        <div className="lg:col-span-7 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)] pr-2">
+          {/* Top Metrics Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="bg-slate-900/40 border border-purple-900/30 p-4 rounded-2xl backdrop-blur-xl shadow-lg">
+              <p className="text-xs text-slate-400 mb-1">Target MRR</p>
+              <p className="text-lg font-bold text-white">₹{targetMrr.toLocaleString()}</p>
+            </div>
+            <div className="bg-slate-900/40 border border-purple-900/30 p-4 rounded-2xl backdrop-blur-xl shadow-lg">
+              <p className="text-xs text-slate-400 mb-1">Active Users</p>
+              <p className="text-lg font-bold text-white">{activeUsers.toLocaleString()}</p>
+            </div>
+            <div className="bg-slate-900/40 border border-purple-900/30 p-4 rounded-2xl backdrop-blur-xl shadow-lg">
+              <p className="text-xs text-slate-400 mb-1">CAC</p>
+              <p className="text-lg font-bold text-white">₹{cac}</p>
+            </div>
+            <div className="bg-slate-900/40 border border-purple-900/30 p-4 rounded-2xl backdrop-blur-xl shadow-lg">
+              <p className="text-xs text-slate-400 mb-1">ARPU</p>
+              <p className="text-lg font-bold text-white">₹{arpu}</p>
+            </div>
+          </div>
+
+          {/* Unit Economics Simulator Panel */}
+          <div className="bg-slate-900/40 border border-purple-900/30 rounded-2xl p-6 backdrop-blur-xl shadow-2xl space-y-5">
+            <h2 className="text-base font-semibold text-purple-300 flex items-center gap-2">
+              📊 Unit Economics Simulator
+            </h2>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-slate-300">
+                  <span>Target MRR</span>
+                  <span className="font-semibold text-purple-400">₹{targetMrr}</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="1000" 
+                  max="100000" 
+                  step="1000"
+                  value={targetMrr} 
+                  onChange={(e) => setTargetMrr(Number(e.target.value))}
+                  className="w-full accent-purple-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-slate-300">
+                  <span>Active Users</span>
+                  <span className="font-semibold text-purple-400">{activeUsers}</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="50" 
+                  max="10000" 
+                  step="50"
+                  value={activeUsers} 
+                  onChange={(e) => setActiveUsers(Number(e.target.value))}
+                  className="w-full accent-purple-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-slate-300">
+                  <span>Customer Acquisition Cost (CAC)</span>
+                  <span className="font-semibold text-pink-400">₹{cac}</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="10" 
+                  max="500" 
+                  step="5"
+                  value={cac} 
+                  onChange={(e) => setCac(Number(e.target.value))}
+                  className="w-full accent-pink-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-slate-300">
+                  <span>Average Revenue Per User (ARPU)</span>
+                  <span className="font-semibold text-purple-400">₹{arpu}</span>
+                </div>
+                <input 
+                  type="range" 
+                  min="20" 
+                  max="1000" 
+                  step="10"
+                  value={arpu} 
+                  onChange={(e) => setArpu(Number(e.target.value))}
+                  className="w-full accent-purple-500 cursor-pointer"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
