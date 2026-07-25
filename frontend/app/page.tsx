@@ -7,7 +7,7 @@ export default function Home() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Hello! I am Venture.ai, your live AI-powered startup strategic advisor. Sign in to save your history, upload financial sheets, or ask me anything about your unit economics."
+      content: "Hello! I am Venture.ai, your live AI-powered startup strategic advisor. Ask me for startup ideas, pitch feedback, or help with your unit economics!"
     }
   ]);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -55,21 +55,60 @@ export default function Home() {
     }
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() && !attachedFile && !audioBlobUrl) return;
 
-    setMessages(prev => [...prev, { role: "user", content: input || "[Attached File / Voice Note]" }]);
+    const userText = input || "[Attached File / Voice Note]";
+    const updatedMessages = [...messages, { role: "user", content: userText }];
+    setMessages(updatedMessages);
     setInput("");
     setAttachedFile(null);
     setAudioBlobUrl(null);
 
-    setTimeout(() => {
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+      if (!apiKey) {
+        setMessages(prev => [
+          ...prev,
+          { role: "assistant", content: "Configuration Error: Please add your NEXT_PUBLIC_GEMINI_API_KEY to your .env.local file." }
+        ]);
+        return;
+      }
+
+      // Format conversation history for Gemini API
+      const contents = updatedMessages.map(msg => ({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }]
+      }));
+
+      // Prepend expert startup advisor instructions
+      contents.unshift({
+        role: "user",
+        parts: [{ text: "System Instructions: You are Venture.ai, an elite, interactive AI startup strategic advisor. Brainstorm creative startup ideas, evaluate business models, analyze unit economics, and provide sharp, actionable venture advice. Be engaging, insightful, and conversational." }]
+      });
+      contents.unshift({
+        role: "model",
+        parts: [{ text: "Understood. I am Venture.ai, your dedicated startup strategic advisor ready to brainstorm ideas, evaluate markets, and scale your business." }]
+      });
+
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents })
+      });
+
+      const data = await response.json();
+      const aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Let's dive deeper into your startup metrics or explore new business angles!";
+
+      setMessages(prev => [...prev, { role: "assistant", content: aiReply }]);
+    } catch (err) {
+      console.error("Gemini API Error:", err);
       setMessages(prev => [
         ...prev,
-        { role: "assistant", content: "I's analyzed your input and updated your projections. Let's optimize your unit economics further!" }
+        { role: "assistant", content: "Sorry, I had trouble connecting to the AI brain. Please check your internet connection or API key." }
       ]);
-    }, 1000);
+    }
   };
 
   return (
@@ -91,7 +130,7 @@ export default function Home() {
 
       {/* Main Split Layout */}
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 p-6">
-        {/* Left Sidebar: Chat Interface */}
+        {/* Left Sidebar: Live Interactive Chat Interface */}
         <div className="lg:col-span-5 bg-slate-900/40 border border-purple-900/30 rounded-2xl flex flex-col h-[calc(100vh-140px)] backdrop-blur-xl overflow-hidden shadow-2xl">
           <div className="p-4 border-b border-purple-900/30 flex items-center justify-between bg-slate-950/40">
             <h2 className="text-sm font-semibold tracking-wide text-purple-300">Strategic Advisor Chat</h2>
@@ -104,7 +143,7 @@ export default function Home() {
                 className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed ${
+                  className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
                     msg.role === 'user'
                       ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-br-none shadow-lg shadow-purple-500/10'
                       : 'bg-slate-900/90 border border-purple-500/20 text-slate-200 rounded-bl-none shadow-inner'
@@ -157,7 +196,7 @@ export default function Home() {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder={isRecording ? "Recording voice note..." : "Ask Venture.ai..."}
+              placeholder={isRecording ? "Recording voice note..." : "Ask for startup ideas, strategy..."}
               disabled={isRecording}
               className="flex-1 bg-slate-900/80 border border-purple-500/30 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500 focus:ring-1 focus:ring-pink-500/50 transition-all text-white placeholder-slate-500"
             />
@@ -170,7 +209,6 @@ export default function Home() {
 
         {/* Right Dashboard Area: Telemetry, Graph & Simulator */}
         <div className="lg:col-span-7 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)] pr-2">
-          {/* Executive Header Card */}
           <div className="bg-slate-900/40 border border-purple-900/30 rounded-2xl p-6 backdrop-blur-xl shadow-2xl">
             <h1 className="text-2xl font-bold tracking-tight text-white mb-1">Executive Intelligence & Growth</h1>
             <p className="text-sm text-slate-400">Real-time telemetry and AI-backed ROI projections.</p>
@@ -203,7 +241,6 @@ export default function Home() {
               <span>Revenue Trajectory (₹)</span>
             </div>
             <div className="h-48 w-full relative flex items-end justify-between px-2 pt-6 border-b border-l border-purple-900/50">
-              {/* Background gradient curve simulation */}
               <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none" preserveAspectRatio="none" viewBox="0 0 500 150">
                 <defs>
                   <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
@@ -214,7 +251,6 @@ export default function Home() {
                 <path d="M 0 120 Q 150 90, 250 60 T 500 10" fill="none" stroke="#c084fc" strokeWidth="3" />
                 <path d="M 0 120 Q 150 90, 250 60 T 500 10 L 500 150 L 0 150 Z" fill="url(#chartGradient)" />
               </svg>
-              {/* X-axis months */}
               <div className="absolute bottom-[-24px] left-0 right-0 flex justify-between text-xs text-slate-500 px-1">
                 <span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span><span>Jul</span>
               </div>
