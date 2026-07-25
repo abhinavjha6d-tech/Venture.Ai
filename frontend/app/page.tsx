@@ -7,12 +7,13 @@ export default function Home() {
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Hello! I am Venture.ai, your live AI-powered startup strategic advisor. Ask me for startup ideas, pitch feedback, or help with your unit economics!"
+      content: "Hello! I am Venture.ai, your live AI-powered startup strategic advisor. Ask me for startup ideas, upload pitch decks/spreadsheets, or record a voice note!"
     }
   ]);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
@@ -36,8 +37,9 @@ export default function Home() {
       };
 
       mediaRecorder.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        const url = URL.createObjectURL(audioBlob);
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        const url = URL.createObjectURL(blob);
         setAudioBlobUrl(url);
       };
 
@@ -55,15 +57,43 @@ export default function Home() {
     }
   };
 
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(blob);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = error => reject(error);
+    });
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() && !attachedFile && !audioBlobUrl) return;
+    if (!input.trim() && !attachedFile && !audioBlob) return;
 
-    const userText = input || "[Attached File / Voice Note]";
+    let displayMessage = input;
+    if (attachedFile) displayMessage += ` [Attached: ${attachedFile.name}]`;
+    if (audioBlob) displayMessage += ` [Attached Voice Note]`;
+
+    const userText = displayMessage.trim();
     const updatedMessages = [...messages, { role: "user", content: userText }];
     setMessages(updatedMessages);
+
+    // Capture current attachments before clearing state
+    const currentFile = attachedFile;
+    const currentAudio = audioBlob;
+
     setInput("");
     setAttachedFile(null);
+    setAudioBlob(null);
     setAudioBlobUrl(null);
 
     try {
@@ -72,23 +102,55 @@ export default function Home() {
         throw new Error("NEXT_PUBLIC_GEMINI_API_KEY is missing or not exposed to the browser.");
       }
 
+      // Build multimodal parts array for Gemini API
+      const parts: any[] = [{ text: input || "Please analyze this file or voice note and provide startup insights." }];
+
+      // Handle attached file (image, spreadsheet, doc, etc.)
+      if (currentFile) {
+        const base64File = await fileToBase64(currentFile);
+        const base64Data = base64File.split(",")[1];
+        parts.push({
+          inlineData: {
+            mimeType: currentFile.type || "application/octet-stream",
+            data: base64Data
+          }
+        });
+      }
+
+      // Handle recorded voice note
+      if (currentAudio) {
+        const base64Audio = await blobToBase64(currentAudio);
+        const base64AudioData = base64Audio.split(",")[1];
+        parts.push({
+          inlineData: {
+            mimeType: "audio/webm",
+            data: base64AudioData
+          }
+        });
+      }
+
       // Format conversation history for Gemini API
-      const contents = updatedMessages.map(msg => ({
+      const contents = updatedMessages.slice(0, -1).map(msg => ({
         role: msg.role === "assistant" ? "model" : "user",
         parts: [{ text: msg.content }]
       }));
 
+      // Add the latest multimodal message
+      contents.push({
+        role: "user",
+        parts: parts
+      });
+
       // Prepend expert startup advisor instructions
       contents.unshift({
         role: "user",
-        parts: [{ text: "System Instructions: You are Venture.ai, an elite, interactive AI startup strategic advisor. Brainstorm creative startup ideas, evaluate business models, analyze unit economics, and provide sharp, actionable venture advice. Be engaging, insightful, and conversational." }]
+        parts: [{ text: "System Instructions: You are Venture.ai, an elite, interactive AI startup strategic advisor. Brainstorm creative startup ideas, evaluate business models, analyze unit economics, review uploaded financial files or voice notes, and provide sharp, actionable venture advice." }]
       });
       contents.unshift({
         role: "model",
-        parts: [{ text: "Understood. I am Venture.ai, your dedicated startup strategic advisor ready to brainstorm ideas, evaluate markets, and scale your business." }]
+        parts: [{ text: "Understood. I am Venture.ai, your dedicated startup strategic advisor ready to analyze files, listen to voice notes, and scale your business." }]
       });
 
-      // Updated endpoint to use the active gemini-3.6-flash model
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -166,7 +228,7 @@ export default function Home() {
                 {attachedFile && <span>📎 {attachedFile.name}</span>}
                 {audioBlobUrl && <audio controls src={audioBlobUrl} className="h-6 w-48" />}
               </div>
-              <button onClick={() => { setAttachedFile(null); setAudioBlobUrl(null); }} className="text-slate-400 hover:text-white p-1 cursor-pointer">
+              <button onClick={() => { setAttachedFile(null); setAudioBlobUrl(null); setAudioBlob(null); }} className="text-slate-400 hover:text-white p-1 cursor-pointer">
                 <X className="w-4 h-4" />
               </button>
             </div>
@@ -177,7 +239,7 @@ export default function Home() {
               <Paperclip className="w-5 h-5" />
               <input 
                 type="file" 
-                accept="image/*,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" 
+                accept="image/*,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" 
                 className="hidden" 
                 onChange={(e) => { 
                   if (e.target.files?.[0]) {
