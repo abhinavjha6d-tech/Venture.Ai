@@ -100,11 +100,11 @@ export default function Home() {
       {/* CUSTOM LOGO HEADER */}
       <header className="flex justify-between items-center mb-8 border-b border-purple-900/40 pb-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-600 to-pink-500 p-0.5 shadow-lg shadow-purple-600/30 flex items-center justify-center">
-            <div className="w-full h-full bg-[#070514] rounded-[10px] flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-purple-400" />
-            </div>
-          </div>
+          <img 
+            src="/logo.png" 
+            alt="Venture AI Logo" 
+            className="w-10 h-10 object-contain rounded-xl shadow-lg shadow-purple-600/30" 
+          />
           <div>
             <h1 className="text-xl md:text-2xl font-black tracking-wider bg-gradient-to-r from-purple-400 via-pink-500 to-indigo-400 bg-clip-text text-transparent">
               VENTURE AI
