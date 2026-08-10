@@ -68,29 +68,15 @@ export default function Home() {
     e.preventDefault();
     if (!input.trim() && !attachment) return;
 
-    const userText = input.trim();
-    const userMessage = userText || (attachment ? `[Uploaded file: ${attachment.name}]` : "");
+    const userMessage = input || (attachment ? `[Uploaded file: ${attachment.name}]` : "");
     setInput("");
     setAttachment(null);
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 
     setTimeout(() => {
-      let reply = "";
-      const lowerInput = userText.toLowerCase();
-
-      if (lowerInput.includes("hi") || lowerInput.includes("hello") || lowerInput.includes("hey")) {
-        reply = "Hello! 👋 I'm Venture AI, your strategic co-pilot. How can I help you build, evaluate, or scale your startup today?";
-      } else if (lowerInput.includes("idea") || lowerInput.includes("startup")) {
-        reply = "That's exciting! To build a strong startup, we need to nail down your target market, monetization model, and unique value proposition. What industry are you looking into?";
-      } else if (lowerInput.includes("mrr") || lowerInput.includes("revenue") || lowerInput.includes("metrics")) {
-        reply = `Looking at your current telemetry: Target MRR is ₹${targetMrr.toLocaleString()}, Active Users are ${activeUsers.toLocaleString()}, CAC is ₹${cac}, and ARPU is ₹${arpu}. Your unit economics show strong scalable momentum!`;
-      } else {
-        reply = `I've processed your input regarding "${userText}". Based on your current financial model (MRR: ₹${targetMrr.toLocaleString()}, Users: ${activeUsers}), you're well-positioned for growth. Let me know if you need help refining your pitch deck or go-to-market strategy!`;
-      }
-
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: reply }
+        { role: "assistant", content: `Analyzing trajectory based on Target MRR ₹${targetMrr}, Active Users ${activeUsers}, CAC ₹${cac}, and ARPU ₹${arpu}. Your unit economics show strong scalable momentum and a solid growth trajectory!` }
       ]);
     }, 1000);
   };
@@ -102,10 +88,6 @@ export default function Home() {
       setTimeout(() => {
         setIsRecording(false);
         setMessages((prev) => [...prev, { role: "user", content: "[Voice Note Recorded]" }]);
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: "Voice note received and parsed successfully! Your audio inquiry has been factored into your startup strategy stream." }
-        ]);
       }, 3000);
     } else {
       setIsRecording(false);
