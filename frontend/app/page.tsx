@@ -1,13 +1,25 @@
 "use client";
-import React, { useState, useRef } from "react";
-import { Paperclip, Mic, Square, Send, X, TrendingUp, Sparkles, Activity } from "lucide-react";
+import React, { useState, useRef, useEffect } from "react";
+import { Paperclip, Mic, Square, Send, X, TrendingUp, Sparkles, Activity, LogOut, Plus, FolderKanban } from "lucide-react";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function Home() {
+  const [activeTab, setActiveTab] = useState<"home" | "about" | "projects" | "faq">("home");
+  const [user, setUser] = useState<any>(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [authError, setAuthError] = useState("");
+
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([
     {
       role: "assistant",
-      content: "Hello! I am Venture AI, your live AI-powered startup strategic advisor. Ask me for startup ideas, upload pitch decks/spreadsheets, or record a voice note!"
+      content: "Hello! I am Venture AI, your live AI-powered startup strategic advisor."
     }
   ]);
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
@@ -17,11 +29,67 @@ export default function Home() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Simulator states
   const [targetMrr, setTargetMrr] = useState(10000);
   const [activeUsers, setActiveUsers] = useState(500);
   const [cac, setCac] = useState(50);
   const [arpu, setArpu] = useState(100);
+
+  const [projects, setProjects] = useState<Array<{ id: string; name: string; description: string; category: string }>>([]);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDesc, setNewProjectDesc] = useState("");
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) fetchProjects(session.user.id);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) fetchProjects(session.user.id);
+      else setProjects([]);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchProjects = async (userId: string) => {
+    const { data } = await supabase.from("projects").select("*").eq("user_id", userId);
+    if (data) setProjects(data);
+  };
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    if (isSignUp) {
+      const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+      if (error) setAuthError(error.message);
+      else alert("Check your email for confirmation link!");
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      if (error) setAuthError(error.message);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  const handleAddProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim() || !user) return;
+    const { data, error } = await supabase
+      .from("projects")
+      .insert([{ user_id: user.id, name: newProjectName, description: newProjectDesc, category: "SaaS Model" }])
+      .select();
+
+    if (error) alert("Error: " + error.message);
+    else if (data) {
+      setProjects([...projects, data[0]]);
+      setNewProjectName("");
+      setNewProjectDesc("");
+    }
+  };
 
   const startRecording = async () => {
     audioChunksRef.current = [];
@@ -29,51 +97,37 @@ export default function Home() {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
+      mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
       mediaRecorder.onstop = () => {
         const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
         setAudioBlob(blob);
-        const url = URL.createObjectURL(blob);
-        setAudioBlobUrl(url);
+        setAudioBlobUrl(URL.createObjectURL(blob));
       };
-
       mediaRecorder.start();
       setIsRecording(true);
     } catch (err) {
-      console.error("Microphone access denied or error:", err);
+      console.error(err);
     }
   };
 
   const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
+    mediaRecorderRef.current?.stop();
+    setIsRecording(false);
   };
 
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-    });
-  };
+  const fileToBase64 = (file: File): Promise<string> => new Promise((res, rej) => {
+    const r = new FileReader();
+    r.readAsDataURL(file);
+    r.onload = () => res(r.result as string);
+    r.onerror = rej;
+  });
 
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-    });
-  };
+  const blobToBase64 = (blob: Blob): Promise<string> => new Promise((res, rej) => {
+    const r = new FileReader();
+    r.readAsDataURL(blob);
+    r.onload = () => res(r.result as string);
+    r.onerror = rej;
+  });
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -83,13 +137,11 @@ export default function Home() {
     if (attachedFile) displayMessage += ` [Attached: ${attachedFile.name}]`;
     if (audioBlob) displayMessage += ` [Attached Voice Note]`;
 
-    const userText = displayMessage.trim();
-    const updatedMessages = [...messages, { role: "user", content: userText }];
+    const updatedMessages = [...messages, { role: "user", content: displayMessage.trim() }];
     setMessages(updatedMessages);
 
     const currentFile = attachedFile;
     const currentAudio = audioBlob;
-
     setInput("");
     setAttachedFile(null);
     setAudioBlob(null);
@@ -97,342 +149,134 @@ export default function Home() {
 
     try {
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("NEXT_PUBLIC_GEMINI_API_KEY is missing or not exposed to the browser.");
-      }
+      if (!apiKey) throw new Error("Missing Gemini API Key in .env.local");
 
-      const parts: any[] = [{ text: input || "Please analyze this file or voice note and provide startup insights." }];
-
+      const parts: any[] = [{ text: input || "Analyze this file/audio." }];
       if (currentFile) {
-        const base64File = await fileToBase64(currentFile);
-        const base64Data = base64File.split(",")[1];
-        parts.push({
-          inlineData: {
-            mimeType: currentFile.type || "application/octet-stream",
-            data: base64Data
-          }
-        });
+        const b64 = await fileToBase64(currentFile);
+        parts.push({ inlineData: { mimeType: currentFile.type || "application/octet-stream", data: b64.split(",")[1] } });
       }
-
       if (currentAudio) {
-        const base64Audio = await blobToBase64(currentAudio);
-        const base64AudioData = base64Audio.split(",")[1];
-        parts.push({
-          inlineData: {
-            mimeType: "audio/webm",
-            data: base64AudioData
-          }
-        });
+        const b64 = await blobToBase64(currentAudio);
+        parts.push({ inlineData: { mimeType: "audio/webm", data: b64.split(",")[1] } });
       }
 
-      const contents = updatedMessages.slice(0, -1).map(msg => ({
-        role: msg.role === "assistant" ? "model" : "user",
-        parts: [{ text: msg.content }]
-      }));
+      const contents = updatedMessages.slice(0, -1).map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+      contents.push({ role: 'user', parts });
+      contents.unshift({ role: 'user', parts: [{ text: `System: Advisor for ${user?.email}. Projects: ${JSON.stringify(projects)}` }] });
+      contents.unshift({ role: 'model', parts: [{ text: "Understood." }] });
 
-      contents.push({
-        role: "user",
-        parts: parts
-      });
-
-      contents.unshift({
-        role: "user",
-        parts: [{ text: "System Instructions: You are Venture AI, an elite, interactive AI startup strategic advisor. Brainstorm creative startup ideas, evaluate business models, analyze unit economics, review uploaded financial files or voice notes, and provide sharp, actionable venture advice." }]
-      });
-      contents.unshift({
-        role: "model",
-        parts: [{ text: "Understood. I am Venture AI, your dedicated startup strategic advisor ready to analyze files, listen to voice notes, and scale your business." }]
-      });
-
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ contents })
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || "API Error");
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || `API Error status: ${response.status}`);
-      }
-
-      const aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!aiReply) {
-        throw new Error("Received empty text response from Gemini API.");
-      }
-
-      setMessages(prev => [...prev, { role: "assistant", content: aiReply }]);
+      const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response.";
+      setMessages(prev => [...prev, { role: "assistant", content: reply }]);
     } catch (err: any) {
-      console.error("Gemini API Error:", err);
-      setMessages(prev => [
-        ...prev,
-        { role: "assistant", content: `⚠️ Debug Error: ${err.message}` }
-      ]);
+      setMessages(prev => [...prev, { role: "assistant", content: `⚠️ Error: ${err.message}` }]);
     }
   };
 
   return (
-    <main className="min-h-screen bg-[#030712] text-slate-100 flex flex-col relative overflow-x-hidden selection:bg-purple-500 selection:text-white">
-      {/* Background ambient lighting effects */}
-      <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-purple-600/10 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-0 right-1/4 w-[500px] h-[500px] bg-pink-600/10 rounded-full blur-[140px] pointer-events-none" />
-
-      {/* Top Glass Header */}
-      <header className="w-full px-6 py-4 flex items-center justify-between border-b border-purple-500/10 bg-[#030712]/80 backdrop-blur-2xl z-20 sticky top-0 shadow-2xl">
-        <div className="flex items-center gap-3.5">
-          <img 
-            src="/logo.png" 
-            alt="Venture AI Logo" 
-            className="h-9 w-9 rounded-xl object-cover shadow-lg shadow-purple-500/30 border border-purple-500/20" 
-          />
-          <div>
-            <span className="font-extrabold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white via-purple-200 to-pink-400 text-base">VENTURE AI</span>
-            <span className="text-[10px] block text-purple-400 font-mono tracking-widest uppercase">Strategic Intelligence Co-Pilot</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-4">
-          <div className="hidden md:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono shadow-lg shadow-emerald-500/5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            LIVE TELEMETRY ACTIVE
-          </div>
-        </div>
+    <main style={{ minHeight: "100vh", backgroundColor: "#030712", color: "#f8fafc", display: "flex", flexDirection: "column" }}>
+      <header style={{ padding: "16px 24px", borderBottom: "1px solid rgba(168,85,247,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#030712" }}>
+        <h2 style={{ fontWeight: "bold", fontSize: "18px", color: "#c084fc" }}>VENTURE AI</h2>
+        {user && (
+          <button onClick={handleSignOut} style={{ background: "#ef4444", color: "white", padding: "6px 14px", borderRadius: "8px", border: "none", cursor: "pointer", fontSize: "12px" }}>
+            Sign Out
+          </button>
+        )}
       </header>
 
-      {/* Main Grid Layout */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5 p-5 max-w-[1800px] w-full mx-auto z-10">
-        
-        {/* Left Panel: Strategic Advisor Chat (Col 5) */}
-        <div className="lg:col-span-5 bg-gradient-to-b from-purple-950/10 to-slate-900/40 border border-purple-500/20 rounded-3xl flex flex-col h-[calc(100vh-104px)] backdrop-blur-2xl overflow-hidden shadow-2xl shadow-purple-950/20">
-          <div className="px-5 py-3.5 border-b border-purple-500/15 flex items-center justify-between bg-purple-950/20">
-            <h2 className="text-xs font-mono uppercase tracking-wider text-purple-300 flex items-center gap-2">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400 animate-pulse" />
-              AI Strategy Stream
-            </h2>
-            <span className="text-[10px] text-purple-400/80 font-mono px-2 py-0.5 rounded-full bg-purple-500/10 border border-purple-500/20">SECURE SESSION</span>
-          </div>
+      {!user ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+          <div style={{ background: "#0f172a", border: "1px solid #7e22ce", padding: "30px", borderRadius: "16px", width: "100%", maxWidth: "400px", boxShadow: "0 10px 25px rgba(0,0,0,0.5)" }}>
+            <h2 style={{ fontSize: "20px", fontWeight: "bold", marginBottom: "8px", textAlign: "center" }}>{isSignUp ? "Create Account" : "Sign In"}</h2>
+            {authError && <p style={{ color: "#f87171", fontSize: "12px", marginBottom: "12px" }}>{authError}</p>}
+            
+            <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>Email</label>
+                <input type="email" required value={authEmail} onChange={e => setAuthEmail(e.target.value)} style={{ width: "100%", padding: "10px", background: "#020617", border: "1px solid #475569", color: "white", borderRadius: "8px", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: "12px", display: "block", marginBottom: "4px" }}>Password</label>
+                <input type="password" required value={authPassword} onChange={e => setAuthPassword(e.target.value)} style={{ width: "100%", padding: "10px", background: "#020617", border: "1px solid #475569", color: "white", borderRadius: "8px", boxSizing: "border-box" }} />
+              </div>
+              
+              {/* EXPLICIT BUTTON STYLE GUARANTEED TO RENDER */}
+              <button type="submit" style={{ width: "100%", padding: "12px", background: "linear-gradient(to right, #9333ea, #db2777)", color: "white", fontWeight: "bold", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "14px", marginTop: "10px" }}>
+                {isSignUp ? "Sign Up Now" : "Sign In Now"}
+              </button>
+            </form>
 
-          {/* Messages Feed */}
-          <div className="flex-1 p-4 overflow-y-auto space-y-4 scrollbar-thin scrollbar-thumb-purple-500/20">
-            {messages.map((msg, index) => (
-              <div
-                key={index}
-                className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[88%] p-4 rounded-2xl text-xs sm:text-sm leading-relaxed whitespace-pre-wrap ${
-                    msg.role === 'user'
-                      ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-br-none shadow-xl shadow-purple-600/25 border border-purple-400/20'
-                      : 'bg-slate-900/80 border border-purple-500/25 text-slate-200 rounded-bl-none shadow-xl backdrop-blur-md'
-                  }`}
-                >
-                  {msg.content}
+            <button onClick={() => setIsSignUp(!isSignUp)} style={{ background: "none", border: "none", color: "#c084fc", cursor: "pointer", fontSize: "12px", width: "100%", marginTop: "15px", textAlign: "center" }}>
+              {isSignUp ? "Already have an account? Sign In" : "Need an account? Sign Up"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+          <nav style={{ display: "flex", gap: "10px", padding: "10px 20px", background: "#0f172a", borderBottom: "1px solid #1e293b" }}>
+            {(['home', 'projects', 'about', 'faq'] as const).map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} style={{ background: activeTab === tab ? "#9333ea" : "transparent", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer", textTransform: "capitalize", fontSize: "12px" }}>
+                {tab}
+              </button>
+            ))}
+          </nav>
+
+          <div style={{ flex: 1, padding: "20px" }}>
+            {activeTab === "home" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", height: "calc(100vh - 150px)" }}>
+                <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: "12px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                  <div style={{ flex: 1, padding: "15px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "10px" }}>
+                    {messages.map((m, i) => (
+                      <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', background: m.role === 'user' ? '#9333ea' : '#1e293b', padding: "10px 14px", borderRadius: "8px", maxWidth: "80%", fontSize: "13px" }}>
+                        {m.content}
+                      </div>
+                    ))}
+                  </div>
+                  <form onSubmit={handleSendMessage} style={{ display: "flex", padding: "10px", background: "#020617", borderTop: "1px solid #1e293b", gap: "10px" }}>
+                    <input type="text" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Venture AI..." style={{ flex: 1, background: "#0f172a", border: "1px solid #475569", color: "white", padding: "8px 12px", borderRadius: "6px", fontSize: "13px" }} />
+                    <button type="submit" style={{ background: "#9333ea", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer" }}>Send</button>
+                  </form>
+                </div>
+                <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: "12px", padding: "20px" }}>
+                  <h3>Metrics & Simulator</h3>
+                  <p style={{ fontSize: "13px", color: "#94a3b8" }}>Target MRR: ₹{targetMrr}</p>
+                  <input type="range" min="1000" max="100000" step="1000" value={targetMrr} onChange={e => setTargetMrr(Number(e.target.value))} style={{ width: "100%", marginTop: "10px" }} />
                 </div>
               </div>
-            ))}
-          </div>
-
-          {/* Active File/Voice Attachments Preview */}
-          {(attachedFile || audioBlobUrl) && (
-            <div className="px-4 py-2.5 bg-purple-950/30 border-t border-purple-500/20 flex items-center justify-between text-xs text-purple-300">
-              <div className="flex items-center gap-2 truncate">
-                {attachedFile && <span className="font-mono text-purple-300">📎 {attachedFile.name}</span>}
-                {audioBlobUrl && <audio controls src={audioBlobUrl} className="h-6 w-48 accent-purple-500" />}
-              </div>
-              <button 
-                onClick={() => { setAttachedFile(null); setAudioBlobUrl(null); setAudioBlob(null); }} 
-                className="text-slate-400 hover:text-white p-1 cursor-pointer transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {/* Chat Input Form */}
-          <form onSubmit={handleSendMessage} className="p-3.5 border-t border-purple-500/20 flex items-center gap-2 bg-slate-950/60">
-            <label className="cursor-pointer text-slate-400 hover:text-purple-300 transition-colors p-2.5 rounded-xl hover:bg-purple-950/40 flex items-center justify-center border border-transparent hover:border-purple-500/30" title="Attach File">
-              <Paperclip className="w-4 h-4" />
-              <input 
-                type="file" 
-                accept="image/*,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" 
-                className="hidden" 
-                onChange={(e) => { 
-                  if (e.target.files?.[0]) {
-                    setAttachedFile(e.target.files[0]);
-                  } 
-                }}
-              />
-            </label>
-
-            {!isRecording ? (
-              <button type="button" onClick={startRecording} className="text-slate-400 hover:text-purple-300 transition-colors p-2.5 rounded-xl hover:bg-purple-950/40 cursor-pointer border border-transparent hover:border-purple-500/30" title="Record Voice Note">
-                <Mic className="w-4 h-4" />
-              </button>
-            ) : (
-              <button type="button" onClick={stopRecording} className="text-rose-400 animate-pulse transition-colors p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/30 cursor-pointer" title="Stop Recording">
-                <Square className="w-4 h-4" />
-              </button>
             )}
 
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={isRecording ? "Listening to voice note..." : "Ask Venture AI for strategy, pitch feedback..."}
-              disabled={isRecording}
-              className="flex-1 bg-slate-900/90 border border-purple-500/30 rounded-xl px-4 py-2.5 text-xs sm:text-sm focus:outline-none focus:border-pink-500 focus:ring-2 focus:ring-pink-500/20 transition-all text-white placeholder-slate-500 font-sans shadow-inner"
-            />
+            {activeTab === "projects" && (
+              <div style={{ maxWidth: "800px", margin: "0 auto" }}>
+                <h2>Your Cloud Projects</h2>
+                <form onSubmit={handleAddProject} style={{ display: "flex", gap: "10px", margin: "20px 0" }}>
+                  <input type="text" placeholder="Project Name" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} style={{ flex: 1, padding: "8px", background: "#0f172a", border: "1px solid #475569", color: "white", borderRadius: "6px" }} />
+                  <input type="text" placeholder="Description" value={newProjectDesc} onChange={e => setNewProjectDesc(e.target.value)} style={{ flex: 2, padding: "8px", background: "#0f172a", border: "1px solid #475569", color: "white", borderRadius: "6px" }} />
+                  <button type="submit" style={{ background: "#9333ea", color: "white", border: "none", padding: "8px 16px", borderRadius: "6px", cursor: "pointer" }}>Save</button>
+                </form>
+                <div style={{ display: "grid", gap: "15px" }}>
+                  {projects.map(p => (
+                    <div key={p.id} style={{ background: "#0f172a", border: "1px solid #1e293b", padding: "15px", borderRadius: "8px" }}>
+                      <h4>{p.name}</h4>
+                      <p style={{ fontSize: "12px", color: "#94a3b8" }}>{p.description}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
-            <button type="submit" className="bg-gradient-to-r from-purple-600 via-purple-500 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white p-2.5 rounded-xl flex items-center justify-center transition-all shadow-lg shadow-purple-600/30 cursor-pointer border border-purple-400/30">
-              <Send className="w-4 h-4" />
-            </button>
-          </form>
+            {activeTab === "about" && <div><h2>About Venture AI</h2><p>Cloud-synced AI startup advisor.</p></div>}
+            {activeTab === "faq" && <div><h2>FAQ</h2><p>All data is saved securely in Supabase.</p></div>}
+          </div>
         </div>
-
-        {/* Right Dashboard Area (Col 7) */}
-        <div className="lg:col-span-7 space-y-4 overflow-y-auto max-h-[calc(100vh-104px)] pr-1 scrollbar-thin scrollbar-thumb-purple-500/20">
-          
-          {/* Top Header Card */}
-          <div className="bg-gradient-to-r from-purple-950/20 via-slate-900/40 to-slate-900/40 border border-purple-500/20 rounded-3xl p-5 backdrop-blur-2xl shadow-xl flex items-center justify-between">
-            <div>
-              <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-                Market Trajectory & Unit Economics
-              </h1>
-              <p className="text-xs text-slate-400 font-mono mt-0.5">Venture growth telemetry matrices</p>
-            </div>
-            <div className="flex gap-2">
-              <span className="px-3 py-1 rounded-xl bg-gradient-to-r from-purple-600/20 to-pink-600/20 border border-purple-500/30 text-purple-300 text-xs font-mono shadow-sm">OPTIMIZED</span>
-            </div>
-          </div>
-
-          {/* Quick Metrics Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3.5">
-            <div className="bg-slate-900/50 border border-purple-500/20 p-4 rounded-2xl backdrop-blur-xl shadow-xl hover:border-purple-500/40 transition-all">
-              <p className="text-[11px] font-mono text-slate-400 mb-1">Target MRR</p>
-              <p className="text-base font-bold text-white font-mono">₹{targetMrr.toLocaleString()}</p>
-            </div>
-            <div className="bg-slate-900/50 border border-purple-500/20 p-4 rounded-2xl backdrop-blur-xl shadow-xl hover:border-purple-500/40 transition-all">
-              <p className="text-[11px] font-mono text-slate-400 mb-1">Active Users</p>
-              <p className="text-base font-bold text-white font-mono">{activeUsers.toLocaleString()}</p>
-            </div>
-            <div className="bg-slate-900/50 border border-purple-500/20 p-4 rounded-2xl backdrop-blur-xl shadow-xl hover:border-pink-500/40 transition-all">
-              <p className="text-[11px] font-mono text-slate-400 mb-1">CAC</p>
-              <p className="text-base font-bold text-pink-400 font-mono">₹{cac}</p>
-            </div>
-            <div className="bg-slate-900/50 border border-purple-500/20 p-4 rounded-2xl backdrop-blur-xl shadow-xl hover:border-purple-500/40 transition-all">
-              <p className="text-[11px] font-mono text-slate-400 mb-1">ARPU</p>
-              <p className="text-base font-bold text-purple-400 font-mono">₹{arpu}</p>
-            </div>
-          </div>
-
-          {/* Graph Section */}
-          <div className="bg-slate-900/50 border border-purple-500/20 rounded-3xl p-5 backdrop-blur-2xl shadow-xl space-y-3">
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-2 text-purple-300 font-mono">
-                <TrendingUp className="w-4 h-4 text-purple-400" />
-                <span>REVENUE TRAJECTORY MODEL</span>
-              </div>
-              <div className="flex items-center gap-3 text-[11px] text-slate-400 font-mono">
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_#22d3ee]" /> Revenue</span>
-                <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-pink-400 shadow-[0_0_8px_#f472b6]" /> LTV</span>
-              </div>
-            </div>
-
-            <div className="h-44 w-full relative flex items-end justify-between px-2 pt-6 border-b border-l border-purple-500/20">
-              <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none" preserveAspectRatio="none" viewBox="0 0 500 150">
-                <defs>
-                  <linearGradient id="chartGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#a855f7" stopOpacity="0.4" />
-                    <stop offset="100%" stopColor="#a855f7" stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-                <path d="M 0 120 Q 150 90, 250 60 T 500 10" fill="none" stroke="#c084fc" strokeWidth="3" />
-                <path d="M 0 135 Q 150 110, 250 85 T 500 35" fill="none" stroke="#22d3ee" strokeWidth="2.5" strokeDasharray="4 4" />
-                <path d="M 0 120 Q 150 90, 250 60 T 500 10 L 500 150 L 0 150 Z" fill="url(#chartGradient)" />
-              </svg>
-              <div className="absolute bottom-[-22px] left-0 right-0 flex justify-between text-[11px] text-slate-400 font-mono px-2">
-                <span>Q1</span><span>Q2</span><span>Q3</span><span>Q4</span><span>Q5</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Unit Economics Simulator Panel */}
-          <div className="bg-slate-900/50 border border-purple-500/20 rounded-3xl p-5 backdrop-blur-2xl shadow-xl space-y-4">
-            <h2 className="text-xs font-mono uppercase tracking-wider text-purple-300 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-purple-400" />
-              Financial Modeling Simulator
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
-              <div className="space-y-2 bg-slate-950/60 p-3.5 rounded-2xl border border-purple-500/15">
-                <div className="flex justify-between text-xs text-slate-300 font-mono">
-                  <span>Target MRR</span>
-                  <span className="font-semibold text-purple-400">₹{targetMrr}</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="1000" 
-                  max="100000" 
-                  step="1000"
-                  value={targetMrr} 
-                  onChange={(e) => setTargetMrr(Number(e.target.value))}
-                  className="w-full accent-purple-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                />
-              </div>
-
-              <div className="space-y-2 bg-slate-950/60 p-3.5 rounded-2xl border border-purple-500/15">
-                <div className="flex justify-between text-xs text-slate-300 font-mono">
-                  <span>Active Users</span>
-                  <span className="font-semibold text-purple-400">{activeUsers}</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="50" 
-                  max="10000" 
-                  step="50"
-                  value={activeUsers} 
-                  onChange={(e) => setActiveUsers(Number(e.target.value))}
-                  className="w-full accent-purple-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                />
-              </div>
-
-              <div className="space-y-2 bg-slate-950/60 p-3.5 rounded-2xl border border-purple-500/15">
-                <div className="flex justify-between text-xs text-slate-300 font-mono">
-                  <span>Customer Acquisition Cost (CAC)</span>
-                  <span className="font-semibold text-pink-400">₹{cac}</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="10" 
-                  max="500" 
-                  step="5"
-                  value={cac} 
-                  onChange={(e) => setCac(Number(e.target.value))}
-                  className="w-full accent-pink-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                />
-              </div>
-
-              <div className="space-y-2 bg-slate-950/60 p-3.5 rounded-2xl border border-purple-500/15">
-                <div className="flex justify-between text-xs text-slate-300 font-mono">
-                  <span>Average Revenue Per User (ARPU)</span>
-                  <span className="font-semibold text-purple-400">₹{arpu}</span>
-                </div>
-                <input 
-                  type="range" 
-                  min="20" 
-                  max="1000" 
-                  step="10"
-                  value={arpu} 
-                  onChange={(e) => setArpu(Number(e.target.value))}
-                  className="w-full accent-purple-500 cursor-pointer h-1.5 bg-slate-800 rounded-lg"
-                />
-              </div>
-            </div>
-          </div>
-
-        </div>
-
-      </div>
+      )}
     </main>
   );
 }
