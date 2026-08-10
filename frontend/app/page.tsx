@@ -18,7 +18,7 @@ export default function Home() {
 
   // Chat and Simulator states
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hello! 👋 I am Venture AI, your live startup strategic advisor. What would you like to discuss today — a new idea, pitch deck, or growth trajectory?" }
+    { role: "assistant", content: "Venture AI online. Ready to analyze startup ideas, evaluate decision-making frameworks, or optimize growth strategies. What are we building today?" }
   ]);
   const [input, setInput] = useState("");
   const [targetMrr, setTargetMrr] = useState(10000);
@@ -77,15 +77,31 @@ export default function Home() {
     setTimeout(() => {
       let reply = "";
       const lowerInput = userText.toLowerCase();
+      
+      const isHindiOrHinglish = 
+        /[\u0900-\u097F]/.test(userText) || 
+        ["kya", "kaise", "batao", "hai", "hain", "karna", "yeh", "mera", "mujhe", "kuch", "bhai"].some(word => lowerInput.includes(word));
 
-      if (lowerInput.includes("hi") || lowerInput.includes("hello") || lowerInput.includes("hey")) {
-        reply = "Hello! 👋 How can I help you with your startup strategy or growth metrics today?";
-      } else if (lowerInput.includes("trajectory") || lowerInput.includes("growth") || lowerInput.includes("mrr") || lowerInput.includes("revenue") || lowerInput.includes("metrics")) {
-        reply = `Analyzing your current growth trajectory and telemetry: Target MRR is ₹${targetMrr.toLocaleString()}, Active Users are ${activeUsers.toLocaleString()}, CAC is ₹${cac}, and ARPU is ₹${arpu}. Your unit economics look quite solid! You can modify the numbers using the right-panel sliders to simulate growth. 🚀`;
-      } else if (lowerInput.includes("idea") || lowerInput.includes("startup")) {
-        reply = "That's a solid concept! To build a successful startup, you need a defined target market, a clear monetization model, and a strong unique value proposition. Which industry or domain are you targeting?";
+      if (isHindiOrHinglish) {
+        if (lowerInput.includes("idea") || lowerInput.includes("startup") || lowerInput.includes("product")) {
+          reply = `Startup idea ka evaluation start kar rahe hain. Target market size (TAM/SAM/SOM), monetization channels, aur unique value proposition (UVP) kya hai? Isko detail mein analyze karte hain.`;
+        } else if (lowerInput.includes("decision") || lowerInput.includes("strategy") || lowerInput.includes("pivot") || lowerInput.includes("choose")) {
+          reply = `Strategic decision-making matrix active hai. Risks aur upside potential weigh karke batao — current bottleneck product-market fit pe hai ya execution pe?`;
+        } else if (lowerInput.includes("growth") || lowerInput.includes("mrr") || lowerInput.includes("scale") || lowerInput.includes("revenue")) {
+          reply = `Growth trajectory check kar rahe hain: MRR ₹${targetMrr.toLocaleString()} aur Active Users ${activeUsers.toLocaleString()} ke sath, customer acquisition cost (CAC) aur lifetime value (LTV) balance optimize karne ke liye GTM channels refine karne honge. 🚀`;
+        } else {
+          reply = `Point noted. Is strategic move ko execute karne ke liye market validation, unit economics, aur resource allocation ko align karna padega. Next step kya plan hai?`;
+        }
       } else {
-        reply = `That's a great point! Your current financial model (MRR: ₹${targetMrr.toLocaleString()}, Users: ${activeUsers}) looks promising. To scale further, would you like to look into go-to-market strategies or pitch deck optimization?`;
+        if (lowerInput.includes("idea") || lowerInput.includes("startup") || lowerInput.includes("product")) {
+          reply = `Evaluating startup concept. Let's break down the Total Addressable Market (TAM), distribution channels, and defensibility moat. What sector are you focusing on?`;
+        } else if (lowerInput.includes("decision") || lowerInput.includes("strategy") || lowerInput.includes("pivot") || lowerInput.includes("choose")) {
+          reply = `Decision matrix initialized. Let's assess the risk profile, trade-offs, and opportunity cost. Are you optimizing for user acquisition, retention, or capital efficiency?`;
+        } else if (lowerInput.includes("growth") || lowerInput.includes("mrr") || lowerInput.includes("scale") || lowerInput.includes("revenue")) {
+          reply = `Analyzing growth vectors at MRR ₹${targetMrr.toLocaleString()} with ${activeUsers.toLocaleString()} active users. To scale sustainably, we need to ensure LTV:CAC ratio exceeds 3:1. Let's look at your conversion funnel. 📈`;
+        } else {
+          reply = `Strategy logged. Current telemetry indicates a solid foundation. Let's focus on execution milestones and risk mitigation for this decision. What's your immediate constraint?`;
+        }
       }
 
       setMessages((prev) => [
@@ -98,13 +114,13 @@ export default function Home() {
   const toggleRecording = () => {
     if (!isRecording) {
       setIsRecording(true);
-      setMessages((prev) => [...prev, { role: "assistant", content: "Listening... Parsing your voice input! 🎙️" }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: "Recording voice input for strategic evaluation... 🎙️" }]);
       setTimeout(() => {
         setIsRecording(false);
         setMessages((prev) => [...prev, { role: "user", content: "[Voice Note Recorded]" }]);
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: `Voice note received! I have factored your audio query into your growth trajectory and financial models. 📈` }
+          { role: "assistant", content: `Voice input processed. Integrating executive briefing into your startup strategy model.` }
         ]);
       }, 3000);
     } else {
@@ -226,7 +242,7 @@ export default function Home() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask a strategic question or type 'trajectory'..."
+                  placeholder="Discuss startup idea, decision, or growth strategy..."
                   className="w-full bg-[#0a071e] border border-purple-900/50 rounded-xl py-3 pl-4 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition"
                 />
                 <button
