@@ -1,4 +1,5 @@
 "use client";
+
 import React, { useState, useRef, useEffect } from "react";
 import { Paperclip, Mic, Square, Send, X, Sparkles, Activity, LogOut, Plus, FolderKanban } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
@@ -8,75 +9,49 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 export default function Home() {
-  const [activeTab, setActiveTab] = useState<"home" | "about" | "projects" | "faq">("home");
-  const [user, setUser] = useState<any>(null);
-  const [authEmail, setAuthEmail] = useState("");
-  const [authPassword, setAuthPassword] = useState("");
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [activeTab, setActiveTab] = useState("Home");
+  const [session, setSession] = useState<any>(null);
+  
+  // Auth state modals/inputs
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
+  const [authMessage, setAuthMessage] = useState("");
 
-  const [input, setInput] = useState("");
+  // Chat and Simulator states
   const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      content: "Hello! I am Venture AI, your live AI-powered startup strategic advisor. Ask me for startup ideas, upload pitch decks/spreadsheets, or record a voice note!"
-    }
+    { role: "assistant", content: "Hello! I am Venture AI, your live AI-powered startup strategic advisor. Ask me for startup ideas, upload pitch decks/spreadsheets, or record a voice note!" }
   ]);
-  const [attachedFile, setAttachedFile] = useState<File | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-
-  // Simulator states
+  const [input, setInput] = useState("");
   const [targetMrr, setTargetMrr] = useState(10000);
   const [activeUsers, setActiveUsers] = useState(500);
-  const [cac, setCac] = useState(50);
-  const [arpu, setArpu] = useState(100);
-
-  // Projects state
-  const [projects, setProjects] = useState<Array<{ id: string; name: string; description: string; category: string }>>([]);
-  const [newProjectName, setNewProjectName] = useState("");
-  const [newProjectDesc, setNewProjectDesc] = useState("");
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      if (session?.user) fetchProjects(session.user.id);
+      setSession(session);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProjects(session.user.id);
-      } else {
-        setProjects([]);
-      }
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchProjects = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("projects")
-      .select("*")
-      .eq("user_id", userId);
-    
-    if (error) console.error("Error fetching projects:", error);
-    else if (data) setProjects(data);
-  };
-
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
-    if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+    setAuthMessage("");
+
+    if (authMode === "signup") {
+      const { error } = await supabase.auth.signUp({ email, password });
       if (error) setAuthError(error.message);
-      else alert("Check your email for confirmation link or try signing in!");
+      else setAuthMessage("Check your email for the confirmation link!");
     } else {
-      const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setAuthError(error.message);
     }
   };
@@ -85,300 +60,218 @@ export default function Home() {
     await supabase.auth.signOut();
   };
 
-  const handleAddProject = async (e: React.FormEvent) => {
+  const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newProjectName.trim() || !user) return;
+    if (!input.trim()) return;
 
-    const { data, error } = await supabase
-      .from("projects")
-      .insert([
-        { user_id: user.id, name: newProjectName, description: newProjectDesc, category: "SaaS Model" }
-      ])
-      .select();
-
-    if (error) {
-      alert("Error adding project: " + error.message);
-    } else if (data) {
-      setProjects([...projects, data[0]]);
-      setNewProjectName("");
-      setNewProjectDesc("");
-    }
-  };
-
-  const startRecording = async () => {
-    audioChunksRef.current = [];
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) audioChunksRef.current.push(event.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        setAudioBlob(blob);
-        setAudioBlobUrl(URL.createObjectURL(blob));
-      };
-
-      mediaRecorder.start();
-      setIsRecording(true);
-    } catch (err) {
-      console.error("Microphone access error:", err);
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-    }
-  };
-
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-    });
-  };
-
-  const blobToBase64 = (blob: Blob): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = error => reject(error);
-    });
-  };
-
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() && !attachedFile && !audioBlob) return;
-
-    let displayMessage = input;
-    if (attachedFile) displayMessage += ` [Attached: ${attachedFile.name}]`;
-    if (audioBlob) displayMessage += ` [Attached Voice Note]`;
-
-    const userText = displayMessage.trim();
-    const updatedMessages = [...messages, { role: "user", content: userText }];
-    setMessages(updatedMessages);
-
-    const currentFile = attachedFile;
-    const currentAudio = audioBlob;
-
+    const userMessage = input;
     setInput("");
-    setAttachedFile(null);
-    setAudioBlob(null);
-    setAudioBlobUrl(null);
+    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 
-    try {
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("NEXT_PUBLIC_GEMINI_API_KEY is missing.");
-
-      const parts: any[] = [{ text: input || "Please analyze this file or voice note." }];
-
-      if (currentFile) {
-        const base64File = await fileToBase64(currentFile);
-        parts.push({ inlineData: { mimeType: currentFile.type || "application/octet-stream", data: base64File.split(",")[1] } });
-      }
-
-      if (currentAudio) {
-        const base64Audio = await blobToBase64(currentAudio);
-        parts.push({ inlineData: { mimeType: "audio/webm", data: base64Audio.split(",")[1] } });
-      }
-
-      const contents = updatedMessages.slice(0, -1).map(msg => ({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }]
-      }));
-
-      contents.push({ role: 'user', parts });
-      contents.unshift({ role: 'user', parts: [{ text: `System: You are Venture AI advisor for ${user?.email || 'Founder'}. Saved projects: ${JSON.stringify(projects)}` }] });
-      contents.unshift({ role: 'model', parts: [{ text: "Understood. Ready with tailored advice." }] });
-
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents })
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error?.message || "API Error");
-
-      const aiReply = data.candidates?.[0]?.content?.parts?.[0]?.text || "No response received.";
-      setMessages(prev => [...prev, { role: "assistant", content: aiReply }]);
-    } catch (err: any) {
-      setMessages(prev => [...prev, { role: "assistant", content: `⚠️ Error: ${err.message}` }]);
-    }
+    // Simulated AI response loop
+    setTimeout(() => {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Analyzing your query regarding "${userMessage}" based on target MRR of ₹${targetMrr}... Strategy looks optimal for growth!` }
+      ]);
+    }, 1000);
   };
 
   return (
-    <main style={{ minHeight: "100vh", backgroundColor: "#030712", color: "#f8fafc", display: "flex", flexDirection: "column" }}>
-      <header style={{ padding: "16px 24px", borderBottom: "1px solid rgba(168,85,247,0.2)", display: "flex", justifyContent: "space-between", alignItems: "center", background: "#030712" }}>
+    <main className="min-h-screen bg-[#070514] text-white p-6 font-sans">
+      {/* HEADER SECTION WITH LOGO & AUTH */}
+      <header className="flex flex-col md:flex-row justify-between items-center mb-8 border-b border-purple-900/40 pb-4 gap-4">
         <div>
-          <span style={{ fontWeight: "extrabold", letterSpacing: "1px", color: "#c084fc", fontSize: "16px" }}>VENTURE AI</span>
-          <span style={{ fontSize: "10px", display: "block", color: "#a855f7", fontFamily: "monospace" }}>CLOUD DATABASE SECURED</span>
+          <h1 className="text-2xl font-black tracking-wider bg-gradient-to-r from-purple-400 via-pink-500 to-indigo-400 bg-clip-text text-transparent">
+            VENTURE AI
+          </h1>
+          <p className="text-[10px] tracking-widest text-purple-400 font-semibold">CLOUD DATABASE SECURED</p>
         </div>
-        {user && (
-          <button onClick={handleSignOut} style={{ background: "#ef4444", color: "white", padding: "6px 14px", borderRadius: "8px", border: "none", cursor: "pointer", fontSize: "12px" }}>
-            Sign Out ({user.email})
-          </button>
-        )}
+
+        {/* Navigation Tabs */}
+        <div className="flex gap-2 bg-[#120F29] p-1.5 rounded-xl border border-purple-900/50">
+          {["Home", "Projects", "About Us", "Faq"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition ${
+                activeTab === tab ? "bg-purple-600 text-white shadow-lg shadow-purple-600/30" : "text-gray-400 hover:text-white"
+              }`}
+            >
+              {tab}
+            </button>
+          ))}
+        </div>
+
+        {/* User Auth Info / Profile Badge */}
+        <div>
+          {session ? (
+            <div className="flex items-center gap-3 bg-[#120F29] border border-purple-900/50 px-4 py-2 rounded-xl">
+              <span className="text-xs text-purple-300 truncate max-w-[160px]">{session.user.email}</span>
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-1.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-200 px-3 py-1.5 rounded-lg text-xs transition"
+              >
+                <LogOut size={14} /> Sign Out
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-400">Secured Portal</span>
+            </div>
+          )}
+        </div>
       </header>
 
-      {!user ? (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-          <div style={{ background: "#0f172a", border: "1px solid #7e22ce", padding: "35px", borderRadius: "20px", width: "100%", maxWidth: "420px", boxShadow: "0 20px 40px rgba(0,0,0,0.6)" }}>
-            <h2 style={{ fontSize: "22px", fontWeight: "bold", marginBottom: "6px", textAlign: "center", color: "white" }}>{isSignUp ? "Create Account" : "Sign In to Venture AI"}</h2>
-            <p style={{ fontSize: "12px", color: "#94a3b8", textAlign: "center", marginBottom: "20px" }}>Access your cloud-saved projects from any device.</p>
-            
-            {authError && <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", padding: "10px", borderRadius: "8px", color: "#f87171", fontSize: "12px", marginBottom: "15px" }}>{authError}</div>}
-            
-            <form onSubmit={handleAuth} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div>
-                <label style={{ fontSize: "12px", fontFamily: "monospace", display: "block", marginBottom: "6px", color: "#cbd5e1" }}>Email Address</label>
-                <input type="email" required value={authEmail} onChange={e => setAuthEmail(e.target.value)} placeholder="founder@venture.ai" style={{ width: "100%", padding: "12px", background: "#020617", border: "1px solid #475569", color: "white", borderRadius: "10px", boxSizing: "border-box", fontSize: "13px", outline: "none" }} />
-              </div>
-              <div>
-                <label style={{ fontSize: "12px", fontFamily: "monospace", display: "block", marginBottom: "6px", color: "#cbd5e1" }}>Password</label>
-                <input type="password" required value={authPassword} onChange={e => setAuthPassword(e.target.value)} placeholder="••••••••" style={{ width: "100%", padding: "12px", background: "#020617", border: "1px solid #475569", color: "white", borderRadius: "10px", boxSizing: "border-box", fontSize: "13px", outline: "none" }} />
-              </div>
-              
-              <button type="submit" style={{ width: "100%", padding: "14px", background: "linear-gradient(to right, #9333ea, #db2777)", color: "white", fontWeight: "bold", border: "none", borderRadius: "10px", cursor: "pointer", fontSize: "14px", marginTop: "6px", boxShadow: "0 4px 15px rgba(147,51,234,0.4)" }}>
-                {isSignUp ? "Sign Up Now" : "Sign In Now"}
+      {/* MAIN LAYOUT */}
+      {session ? (
+        // --- LOGGED IN WORKSPACE UI ---
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 animate-fadeIn">
+          {/* Left Panel: Chat Stream */}
+          <div className="bg-[#120F29]/90 border border-purple-900/50 rounded-2xl p-5 flex flex-col h-[650px] shadow-xl backdrop-blur-md">
+            <div className="flex items-center gap-2 mb-4 text-purple-400 border-b border-purple-900/40 pb-3">
+              <Sparkles size={18} />
+              <h2 className="text-sm font-bold tracking-wide uppercase">AI Strategy Stream</h2>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2 mb-4">
+              {messages.map((msg, index) => (
+                <div key={index} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed ${
+                      msg.role === "user"
+                        ? "bg-purple-600 text-white rounded-br-none"
+                        : "bg-[#1a1638] border border-purple-900/40 text-gray-200 rounded-bl-none"
+                    }`}
+                  >
+                    {msg.content}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <form onSubmit={handleSendMessage} className="relative mt-auto">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask Venture AI..."
+                className="w-full bg-[#0a071e] border border-purple-900/50 rounded-xl py-3 pl-4 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition"
+              />
+              <button
+                type="submit"
+                className="absolute right-2 top-1/2 -translate-y-1/2 bg-purple-600 hover:bg-purple-500 p-2 rounded-lg text-white transition shadow-md shadow-purple-600/40"
+              >
+                <Send size={16} />
               </button>
             </form>
+          </div>
 
-            <div style={{ textAlign: "center", marginTop: "20px", borderTop: "1px solid #1e293b", paddingTop: "15px" }}>
-              <button onClick={() => setIsSignUp(!isSignUp)} style={{ background: "none", border: "none", color: "#c084fc", cursor: "pointer", fontSize: "12px", fontFamily: "monospace" }}>
-                {isSignUp ? "Already have an account? Sign In" : "Don't have an account? Sign Up"}
-              </button>
+          {/* Right Panel: Financial Simulator */}
+          <div className="bg-[#120F29]/90 border border-purple-900/50 rounded-2xl p-6 flex flex-col gap-6 shadow-xl backdrop-blur-md">
+            <div className="flex items-center gap-2 text-purple-400 border-b border-purple-900/40 pb-3">
+              <Activity size={18} />
+              <h2 className="text-sm font-bold tracking-wide uppercase">Financial Simulator</h2>
+            </div>
+
+            <div className="space-y-6">
+              <div className="bg-[#0a071e] p-4 rounded-xl border border-purple-900/30">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-sm font-medium text-gray-300">Target MRR</label>
+                  <span className="text-purple-400 font-bold">₹{targetMrr}</span>
+                </div>
+                <input
+                  type="range"
+                  min="1000"
+                  max="100000"
+                  step="1000"
+                  value={targetMrr}
+                  onChange={(e) => setTargetMrr(Number(e.target.value))}
+                  className="w-full accent-purple-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="bg-[#0a071e] p-4 rounded-xl border border-purple-900/30">
+                <div className="flex justify-between items-center mb-2">
+                  <label className="text-sm font-medium text-gray-300">Active Users</label>
+                  <span className="text-purple-400 font-bold">{activeUsers}</span>
+                </div>
+                <input
+                  type="range"
+                  min="50"
+                  max="10000"
+                  step="50"
+                  value={activeUsers}
+                  onChange={(e) => setActiveUsers(Number(e.target.value))}
+                  className="w-full accent-purple-500 cursor-pointer"
+                />
+              </div>
+
+              <div className="p-4 rounded-xl bg-purple-950/20 border border-purple-900/40">
+                <h3 className="text-xs uppercase font-semibold text-purple-400 mb-1">Estimated Valuation Growth</h3>
+                <p className="text-2xl font-black text-white">₹{(targetMrr * 12 * 5).toLocaleString()}</p>
+                <p className="text-xs text-gray-400 mt-1">Projected at 5x ARR multiple based on current sliders.</p>
+              </div>
             </div>
           </div>
         </div>
       ) : (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
-          <nav style={{ display: "flex", gap: "10px", padding: "12px 24px", background: "#0f172a", borderBottom: "1px solid #1e293b" }}>
-            {(['home', 'projects', 'about', 'faq'] as const).map(tab => (
-              <button key={tab} onClick={() => setActiveTab(tab)} style={{ background: activeTab === tab ? "linear-gradient(to right, #9333ea, #db2777)" : "transparent", color: "white", border: "none", padding: "8px 18px", borderRadius: "8px", cursor: "pointer", textTransform: "capitalize", fontSize: "12px", fontWeight: "600" }}>
-                {tab === 'about' ? 'About Us' : tab}
-              </button>
-            ))}
-          </nav>
+        // --- LOGGED OUT UI / LANDING & AUTH CARD ---
+        <div className="max-w-md mx-auto mt-12 bg-[#120F29]/90 border border-purple-900/60 rounded-3xl p-8 shadow-2xl backdrop-blur-xl">
+          <div className="text-center mb-6">
+            <h2 className="text-2xl font-black text-white mb-2">
+              {authMode === "signin" ? "Welcome Back" : "Create Account"}
+            </h2>
+            <p className="text-xs text-gray-400">Sign in or sign up to access your secure Venture AI workspace.</p>
+          </div>
 
-          <div style={{ flex: 1, padding: "24px" }}>
-            {activeTab === "home" && (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: "24px", height: "calc(100vh - 160px)" }}>
-                <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: "16px", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                  <div style={{ padding: "12px 16px", background: "rgba(147,51,234,0.1)", borderBottom: "1px solid #1e293b", fontSize: "11px", fontFamily: "monospace", color: "#d8b4fe", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <Sparkles size={14} /> AI Strategy Stream
-                  </div>
-                  <div style={{ flex: 1, padding: "16px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "12px" }}>
-                    {messages.map((m, i) => (
-                      <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', background: m.role === 'user' ? '#9333ea' : '#1e293b', padding: "12px 16px", borderRadius: "12px", maxWidth: "85%", fontSize: "13px", lineHeight: "1.5", whiteSpace: "pre-wrap" }}>
-                        {m.content}
-                      </div>
-                    ))}
-                  </div>
+          <form onSubmit={handleAuth} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">Email Address</label>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@example.com"
+                className="w-full bg-[#0a071e] border border-purple-900/50 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition"
+              />
+            </div>
 
-                  {(attachedFile || audioBlobUrl) && (
-                    <div style={{ padding: "10px 16px", background: "rgba(147,51,234,0.15)", borderTop: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", color: "#d8b4fe" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        {attachedFile && <span>📎 {attachedFile.name}</span>}
-                        {audioBlobUrl && <audio controls src={audioBlobUrl} style={{ height: "24px", width: "180px" }} />}
-                      </div>
-                      <button onClick={() => { setAttachedFile(null); setAudioBlobUrl(null); setAudioBlob(null); }} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer" }}>
-                        <X size={16} />
-                      </button>
-                    </div>
-                  )}
+            <div>
+              <label className="block text-xs font-semibold text-gray-300 mb-1">Password</label>
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full bg-[#0a071e] border border-purple-900/50 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition"
+              />
+            </div>
 
-                  <form onSubmit={handleSendMessage} style={{ display: "flex", padding: "12px", background: "#020617", borderTop: "1px solid #1e293b", gap: "10px", alignItems: "center" }}>
-                    <label style={{ cursor: "pointer", color: "#94a3b8", padding: "6px" }}>
-                      <Paperclip size={16} />
-                      <input type="file" accept="image/*,.csv,.txt,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style={{ display: "none" }} onChange={(e) => { if (e.target.files?.[0]) setAttachedFile(e.target.files[0]); }} />
-                    </label>
+            {authError && <p className="text-xs text-red-400 bg-red-500/10 p-3 rounded-lg border border-red-500/30">{authError}</p>}
+            {authMessage && <p className="text-xs text-emerald-400 bg-emerald-500/10 p-3 rounded-lg border border-emerald-500/30">{authMessage}</p>}
 
-                    {!isRecording ? (
-                      <button type="button" onClick={startRecording} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", padding: "6px" }}>
-                        <Mic size={16} />
-                      </button>
-                    ) : (
-                      <button type="button" onClick={stopRecording} style={{ background: "rgba(239,68,68,0.2)", border: "1px solid rgba(239,68,68,0.4)", color: "#f87171", cursor: "pointer", padding: "6px", borderRadius: "6px" }}>
-                        <Square size={16} />
-                      </button>
-                    )}
+            <button
+              type="submit"
+              className="w-full bg-purple-600 hover:bg-purple-500 text-white font-semibold py-3 rounded-xl transition shadow-lg shadow-purple-600/30 text-sm mt-2"
+            >
+              {authMode === "signin" ? "Sign In" : "Sign Up"}
+            </button>
+          </form>
 
-                    <input type="text" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask Venture AI..." style={{ flex: 1, background: "#0f172a", border: "1px solid #475569", color: "white", padding: "10px 14px", borderRadius: "8px", fontSize: "13px", outline: "none" }} />
-                    <button type="submit" style={{ background: "linear-gradient(to right, #9333ea, #db2777)", color: "white", border: "none", padding: "10px 16px", borderRadius: "8px", cursor: "pointer" }}>
-                      <Send size={16} />
-                    </button>
-                  </form>
-                </div>
-
-                <div style={{ background: "#0f172a", border: "1px solid #1e293b", borderRadius: "16px", padding: "24px", display: "flex", flexDirection: "column", gap: "20px" }}>
-                  <h3 style={{ fontSize: "14px", fontFamily: "monospace", color: "#d8b4fe", textTransform: "uppercase" }}>Financial Simulator</h3>
-                  <div style={{ background: "#020617", padding: "16px", borderRadius: "12px", border: "1px solid #1e293b", display: "flex", flexDirection: "column", gap: "8px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontFamily: "monospace" }}>
-                      <span>Target MRR</span><span style={{ color: "#c084fc", fontWeight: "bold" }}>₹{targetMrr}</span>
-                    </div>
-                    <input type="range" min="1000" max="100000" step="1000" value={targetMrr} onChange={e => setTargetMrr(Number(e.target.value))} style={{ width: "100%", accentColor: "#9333ea", cursor: "pointer" }} />
-                  </div>
-                  <div style={{ background: "#020617", padding: "16px", borderRadius: "12px", border: "1px solid #1e293b", display: "flex", flexDirection: "column", gap: "8px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "13px", fontFamily: "monospace" }}>
-                      <span>Active Users</span><span style={{ color: "#c084fc", fontWeight: "bold" }}>{activeUsers}</span>
-                    </div>
-                    <input type="range" min="50" max="10000" step="50" value={activeUsers} onChange={e => setActiveUsers(Number(e.target.value))} style={{ width: "100%", accentColor: "#9333ea", cursor: "pointer" }} />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === "projects" && (
-              <div style={{ maxWidth: "900px", margin: "0 auto", display: "flex", flexDirection: "column", gap: "20px" }}>
-                <div>
-                  <h2 style={{ fontSize: "24px", fontWeight: "bold", color: "white" }}>Cloud-Synced Venture Projects</h2>
-                  <p style={{ fontSize: "13px", color: "#94a3b8", marginTop: "4px" }}>Stored permanently in your Supabase account database.</p>
-                </div>
-
-                <form onSubmit={handleAddProject} style={{ background: "#0f172a", border: "1px solid #1e293b", padding: "20px", borderRadius: "16px", display: "flex", gap: "12px" }}>
-                  <input type="text" placeholder="Project Name" value={newProjectName} onChange={e => setNewProjectName(e.target.value)} style={{ flex: 1, padding: "10px 14px", background: "#020617", border: "1px solid #475569", color: "white", borderRadius: "8px", fontSize: "13px", outline: "none" }} />
-                  <input type="text" placeholder="Short Description" value={newProjectDesc} onChange={e => setNewProjectDesc(e.target.value)} style={{ flex: 2, padding: "10px 14px", background: "#020617", border: "1px solid #475569", color: "white", borderRadius: "8px", fontSize: "13px", outline: "none" }} />
-                  <button type="submit" style={{ background: "linear-gradient(to right, #9333ea, #db2777)", color: "white", border: "none", padding: "10px 20px", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: "bold", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <Plus size={14} /> Save to Cloud
-                  </button>
-                </form>
-
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
-                  {projects.map(p => (
-                    <div key={p.id} style={{ background: "#0f172a", border: "1px solid #1e293b", padding: "20px", borderRadius: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <span style={{ fontSize: "11px", fontFamily: "monospace", color: "#c084fc", width: "fit-content", padding: "2px 8px", borderRadius: "999px", background: "rgba(147,51,234,0.15)", border: "1px solid rgba(168,85,247,0.3)" }}>
-                        <FolderKanban size={12} style={{ display: "inline", marginRight: "4px" }} /> Cloud Record
-                      </span>
-                      <h3 style={{ fontSize: "16px", fontWeight: "bold", color: "white" }}>{p.name}</h3>
-                      <p style={{ fontSize: "12px", color: "#94a3b8", lineHeight: "1.5" }}>{p.description}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {activeTab === "about" && (
-              <div style={{ maxWidth: "800px", margin: "0 auto", background: "#0f172a", border: "1px solid #1e293b", padding: "30px", borderRadius: "16px" }}>
-                <h2 style={{ fontSize: "22px", fontWeight: "bold", color: "white", marginBottom: "12px" }}>About Venture AI</h2>
-                <p style={{ color: "#cbd5e1", fontSize: "14px", lineHeight: "1.6" }}>Venture AI combines cutting-edge generative intelligence with robust PostgreSQL database storage via Supabase, ensuring absolute data permanence and multi-device accessibility.</p>
-              </div>
-            )}
-
-            {activeTab === "faq" && (
-              <div style={{ maxWidth: "800px", margin: "0 auto", background: "#0f172a", border: "1px solid #1e293b", padding: "24px", borderRadius: "16px" }}>
-                <h2 style={{ fontSize: "18px", fontWeight: "bold", color: "white", marginBottom: "8px" }}>Are my projects permanently saved?</h2>
-                <p style={{ color: "#94a3b8", fontSize: "13px", lineHeight: "1.5" }}>Yes! Because they are stored in a cloud database linked directly to your user account, you can log in on any computer and your portfolio will be right there.</p>
-              </div>
-            )}
+          <div className="text-center mt-6">
+            <button
+              onClick={() => {
+                setAuthMode(authMode === "signin" ? "signup" : "signin");
+                setAuthError("");
+                setAuthMessage("");
+              }}
+              className="text-xs text-purple-400 hover:text-purple-300 transition"
+            >
+              {authMode === "signin" ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+            </button>
           </div>
         </div>
       )}
