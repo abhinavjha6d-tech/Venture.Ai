@@ -18,7 +18,7 @@ export default function Home() {
 
   // Chat and Simulator states
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hello! I am Venture AI, your live AI-powered startup strategic advisor. Ask me for startup ideas, upload pitch decks/spreadsheets, or record a voice note!" }
+    { role: "assistant", content: "Arre hello! 👋 Main Venture AI hoon, tera live startup strategic advisor. Batao aaj kya discuss karna hai — koi nayi idea, pitch deck, ya growth trajectory?" }
   ]);
   const [input, setInput] = useState("");
   const [targetMrr, setTargetMrr] = useState(10000);
@@ -68,15 +68,29 @@ export default function Home() {
     e.preventDefault();
     if (!input.trim() && !attachment) return;
 
-    const userMessage = input || (attachment ? `[Uploaded file: ${attachment.name}]` : "");
+    const userText = input.trim();
+    const userMessage = userText || (attachment ? `[Uploaded file: ${attachment.name}]` : "");
     setInput("");
     setAttachment(null);
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 
     setTimeout(() => {
+      let reply = "";
+      const lowerInput = userText.toLowerCase();
+
+      if (lowerInput.includes("hi") || lowerInput.includes("hello") || lowerInput.includes("hey")) {
+        reply = "Arre hello! 👋 Kaise ho? Batao aaj kis startup idea ya growth trajectory pe kaam karna hai?";
+      } else if (lowerInput.includes("trajectory") || lowerInput.includes("growth") || lowerInput.includes("mrr") || lowerInput.includes("revenue") || lowerInput.includes("metrics")) {
+        reply = `Teri current growth trajectory aur telemetry check kar raha hoon: Target MRR ₹${targetMrr.toLocaleString()} hai, Active Users ${activeUsers.toLocaleString()} hain, CAC ₹${cac} aur ARPU ₹${arpu} hai. Unit economics kaafi solid lag rahe hain! Right panel ke sliders se numbers change karke growth simulate karke dekh sakte ho. 🚀`;
+      } else if (lowerInput.includes("idea") || lowerInput.includes("startup")) {
+        reply = "Ekdum mast soch hai! Ek successful startup banane ke liye target market, clear monetization model aur unique value proposition hona zaroori hai. Batao, kis industry ya domain mein dive in kar rahe ho?";
+      } else {
+        reply = `Badiya point uthaya hai! Tera current financial model (MRR: ₹${targetMrr.toLocaleString()}, Users: ${activeUsers}) kaafi promising hai. Isko aur scale karne ke liye batao, go-to-market strategy ya pitch deck mein kuch help chahiye kya?`;
+      }
+
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `Analyzing trajectory based on Target MRR ₹${targetMrr}, Active Users ${activeUsers}, CAC ₹${cac}, and ARPU ₹${arpu}. Your unit economics show strong scalable momentum and a solid growth trajectory!` }
+        { role: "assistant", content: reply }
       ]);
     }, 1000);
   };
@@ -84,10 +98,14 @@ export default function Home() {
   const toggleRecording = () => {
     if (!isRecording) {
       setIsRecording(true);
-      setMessages((prev) => [...prev, { role: "assistant", content: "Listening to voice input... (Voice simulation active)" }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: "Sun raha hoon... Voice input parse ho raha hai! 🎙️" }]);
       setTimeout(() => {
         setIsRecording(false);
         setMessages((prev) => [...prev, { role: "user", content: "[Voice Note Recorded]" }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: `Voice note mil gaya! Teri audio query ko growth trajectory aur financial models ke sath factor-in kar liya hai. 📈` }
+        ]);
       }, 3000);
     } else {
       setIsRecording(false);
@@ -208,7 +226,7 @@ export default function Home() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask Venture AI for strategy, pitch decks..."
+                  placeholder="Kuch poocho, jaise 'Hi' ya 'Trajectory'..."
                   className="w-full bg-[#0a071e] border border-purple-900/50 rounded-xl py-3 pl-4 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition"
                 />
                 <button
