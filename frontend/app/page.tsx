@@ -68,15 +68,29 @@ export default function Home() {
     e.preventDefault();
     if (!input.trim() && !attachment) return;
 
-    const userMessage = input || (attachment ? `[Uploaded file: ${attachment.name}]` : "");
+    const userText = input.trim();
+    const userMessage = userText || (attachment ? `[Uploaded file: ${attachment.name}]` : "");
     setInput("");
     setAttachment(null);
     setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
 
     setTimeout(() => {
+      let reply = "";
+      const lowerInput = userText.toLowerCase();
+
+      if (lowerInput.includes("hi") || lowerInput.includes("hello") || lowerInput.includes("hey")) {
+        reply = "Hello! 👋 I'm Venture AI, your strategic co-pilot. How can I help you build, evaluate, or scale your startup today?";
+      } else if (lowerInput.includes("idea") || lowerInput.includes("startup")) {
+        reply = "That's exciting! To build a strong startup, we need to nail down your target market, monetization model, and unique value proposition. What industry are you looking into?";
+      } else if (lowerInput.includes("mrr") || lowerInput.includes("revenue") || lowerInput.includes("metrics")) {
+        reply = `Looking at your current telemetry: Target MRR is ₹${targetMrr.toLocaleString()}, Active Users are ${activeUsers.toLocaleString()}, CAC is ₹${cac}, and ARPU is ₹${arpu}. Your unit economics show strong scalable momentum!`;
+      } else {
+        reply = `I've processed your input regarding "${userText}". Based on your current financial model (MRR: ₹${targetMrr.toLocaleString()}, Users: ${activeUsers}), you're well-positioned for growth. Let me know if you need help refining your pitch deck or go-to-market strategy!`;
+      }
+
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: `Analyzing trajectory based on Target MRR ₹${targetMrr}, Active Users ${activeUsers}, CAC ₹${cac}, and ARPU ₹${arpu}. Your unit economics show strong scalable momentum!` }
+        { role: "assistant", content: reply }
       ]);
     }, 1000);
   };
@@ -88,6 +102,10 @@ export default function Home() {
       setTimeout(() => {
         setIsRecording(false);
         setMessages((prev) => [...prev, { role: "user", content: "[Voice Note Recorded]" }]);
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Voice note received and parsed successfully! Your audio inquiry has been factored into your startup strategy stream." }
+        ]);
       }, 3000);
     } else {
       setIsRecording(false);
@@ -139,7 +157,6 @@ export default function Home() {
 
       {/* MAIN CONTAINER */}
       {session ? (
-        // --- LOGGED-IN FULL DASHBOARD (Logo, Chat, Live Graph, Simulators) ---
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
           {/* LEFT COLUMN: CHAT STREAM */}
@@ -237,7 +254,6 @@ export default function Home() {
                 </span>
               </div>
 
-              {/* 4 Metric Cards */}
               <div className="grid grid-cols-2 gap-3 mt-4">
                 <div className="bg-[#0a071e] border border-purple-900/40 p-3.5 rounded-2xl">
                   <span className="text-[11px] text-gray-400 block mb-1">Target MRR</span>
@@ -271,7 +287,6 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* SVG Dynamic Graph that changes with Sliders */}
               <div className="h-36 w-full relative flex items-end pt-4">
                 <svg className="w-full h-full overflow-visible" viewBox="0 0 500 150" preserveAspectRatio="none">
                   <defs>
@@ -280,19 +295,16 @@ export default function Home() {
                       <stop offset="100%" stopColor="#a855f7" stopOpacity="0.0" />
                     </linearGradient>
                   </defs>
-                  {/* Area fill */}
                   <path
                     d={`M 0,${Math.max(20, 140 - (targetMrr / 800))} Q 125,${Math.max(10, 110 - (activeUsers / 80))} 250,${Math.max(10, 80 - (targetMrr / 1500))} T 500,${Math.max(5, 40 - (targetMrr / 2000))} L 500,150 L 0,150 Z`}
                     fill="url(#grad)"
                   />
-                  {/* LTV Curve */}
                   <path
                     d={`M 0,${Math.max(30, 130 - (targetMrr / 900))} Q 125,${Math.max(15, 95 - (activeUsers / 70))} 250,${Math.max(10, 65 - (targetMrr / 1400))} T 500,${Math.max(5, 25 - (targetMrr / 1800))}`}
                     fill="none"
                     stroke="#ec4899"
                     strokeWidth="3"
                   />
-                  {/* Revenue Curve */}
                   <path
                     d={`M 0,${Math.max(50, 140 - (targetMrr / 1000))} Q 125,${Math.max(25, 120 - (activeUsers / 90))} 250,${Math.max(20, 90 - (targetMrr / 1600))} T 500,${Math.max(10, 50 - (targetMrr / 2200))}`}
                     fill="none"
@@ -352,7 +364,6 @@ export default function Home() {
           </div>
         </div>
       ) : (
-        // --- LOGGED OUT AUTHENTICATION CARD (Clean & Secured) ---
         <div className="max-w-md mx-auto mt-16 bg-[#120F29]/90 border border-purple-900/60 rounded-3xl p-8 shadow-2xl backdrop-blur-2xl">
           <div className="text-center mb-6">
             <h2 className="text-2xl font-black text-white mb-2">
