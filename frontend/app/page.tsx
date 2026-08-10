@@ -3,10 +3,14 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Paperclip, Mic, Square, Send, X, Sparkles, Activity, LogOut, ShieldCheck, User } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
+import { GoogleGenAI } from "@google/genai";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Initialize Gemini API client (Make sure NEXT_PUBLIC_GEMINI_API_KEY is set in your environment variables)
+const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || "" });
 
 export default function Home() {
   const [session, setSession] = useState<any>(null);
@@ -18,7 +22,7 @@ export default function Home() {
 
   // Chat and Simulator states
   const [messages, setMessages] = useState([
-    { role: "assistant", content: "Hello! 👋 I am Venture AI, your live startup strategic advisor. What would you like to discuss today — a new idea, pitch deck, or growth trajectory?" }
+    { role: "assistant", content: "Hey! 👋 I'm Venture AI, your friendly startup advisor and decision partner. What's on your mind today — brainstorming an idea, working through a tough business decision, or figuring out your next growth step?" }
   ]);
   const [input, setInput] = useState("");
   const [targetMrr, setTargetMrr] = useState(10000);
@@ -64,7 +68,7 @@ export default function Home() {
     await supabase.auth.signOut();
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() && !attachment) return;
 
@@ -72,55 +76,58 @@ export default function Home() {
     const userMessage = userText || (attachment ? `[Uploaded file: ${attachment.name}]` : "");
     setInput("");
     setAttachment(null);
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    
+    const updatedMessages = [...messages, { role: "user", content: userMessage }];
+    setMessages(updatedMessages);
 
-    setTimeout(() => {
-      let reply = "";
-      const lowerInput = userText.toLowerCase();
-      
-      const isHindiOrHinglish = 
-        /[\u0900-\u097F]/.test(userText) || 
-        ["kya", "kaise", "batao", "hai", "hain", "karna", "yeh", "mera", "mujhe", "kuch", "bhai", "or"].some(word => lowerInput.includes(word));
+    try {
+      // Real dynamic Gemini API integration acting as a friendly startup advisor
+      const systemInstruction = `You are Ventura AI, a friendly, sharp, and supportive startup advisor and decision helper. 
+      You speak naturally, match the user's language style (English, Hindi, or Hinglish seamlessly based on their prompt), and give practical, actionable startup, product, and growth advice. 
+      Current user telemetry context: Target MRR is ₹${targetMrr}, Active Users are ${activeUsers}, CAC is ₹${cac}, ARPU is ₹${arpu}. 
+      Keep your tone conversational, motivating, and smart. Avoid robotic or pre-fed templates; think dynamically like an expert co-founder.`;
 
-      if (isHindiOrHinglish) {
-        if (lowerInput.includes("hi") || lowerInput.includes("hello") || lowerInput.includes("hey")) {
-          reply = "Arre hello! 👋 Kaise ho? Batao aaj kis startup idea ya growth trajectory pe kaam karna hai?";
-        } else if (lowerInput.includes("trajectory") || lowerInput.includes("growth") || lowerInput.includes("mrr") || lowerInput.includes("revenue") || lowerInput.includes("metrics")) {
-          reply = `Teri current growth trajectory aur telemetry check kar raha hoon: Target MRR ₹${targetMrr.toLocaleString()} hai, Active Users ${activeUsers.toLocaleString()} hain, CAC ₹${cac} aur ARPU ₹${arpu} hai. Unit economics kaafi solid lag rahe hain! Right panel ke sliders se numbers change karke growth simulate karke dekh sakte ho. 🚀`;
-        } else if (lowerInput.includes("idea") || lowerInput.includes("startup")) {
-          reply = "Ekdum mast soch hai! Ek successful startup banane ke liye target market, clear monetization model aur unique value proposition hona zaroori hai. Batao, kis industry ya domain mein dive in kar rahe ho?";
-        } else {
-          reply = `Badiya point uthaya hai! Tera current financial model (MRR: ₹${targetMrr.toLocaleString()}, Users: ${activeUsers}) kaafi promising hai. Isko aur scale karne ke liye batao, go-to-market strategy ya pitch deck mein kuch help chahiye kya?`;
+      // Format conversation history for Gemini SDK
+      const contents = updatedMessages.map(msg => ({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }]
+      }));
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: contents,
+        config: {
+          systemInstruction: systemInstruction,
+          temperature: 0.7,
         }
-      } else {
-        if (lowerInput.includes("hi") || lowerInput.includes("hello") || lowerInput.includes("hey")) {
-          reply = "Hello! 👋 How can I help you with your startup strategy or growth metrics today?";
-        } else if (lowerInput.includes("trajectory") || lowerInput.includes("growth") || lowerInput.includes("mrr") || lowerInput.includes("revenue") || lowerInput.includes("metrics")) {
-          reply = `Analyzing your current growth trajectory and telemetry: Target MRR is ₹${targetMrr.toLocaleString()}, Active Users are ${activeUsers.toLocaleString()}, CAC is ₹${cac}, and ARPU is ₹${arpu}. Your unit economics look quite solid! You can modify the numbers using the right-panel sliders to simulate growth. 🚀`;
-        } else if (lowerInput.includes("idea") || lowerInput.includes("startup")) {
-          reply = "That's a solid concept! To build a successful startup, you need a defined target market, a clear monetization model, and a strong unique value proposition. Which industry or domain are you targeting?";
-        } else {
-          reply = `That's a great point! Your current financial model (MRR: ₹${targetMrr.toLocaleString()}, Users: ${activeUsers}) looks promising. To scale further, would you like to look into go-to-market strategies or pitch deck optimization?`;
-        }
-      }
+      });
+
+      const reply = response.text || "Acha sawaal hai! Isko aur detail mein analyze karte hain. Batao aage kya plan hai?";
 
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: reply }
       ]);
-    }, 1000);
+    } catch (error) {
+      console.error("Gemini API Error:", error);
+      // Fallback response if API key isn't active or network fails
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Arre, lagta hai network connection mein thoda hiccup aa gaya! Par baat clear hai—apne startup ke is milestone ko achieve karne ke liye batao next step kya socha hai?" }
+      ]);
+    }
   };
 
   const toggleRecording = () => {
     if (!isRecording) {
       setIsRecording(true);
-      setMessages((prev) => [...prev, { role: "assistant", content: "Listening... Parsing your voice input! 🎙️" }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: "Listening closely... Go ahead, spill your thoughts! 🎙️" }]);
       setTimeout(() => {
         setIsRecording(false);
         setMessages((prev) => [...prev, { role: "user", content: "[Voice Note Recorded]" }]);
         setMessages((prev) => [
           ...prev,
-          { role: "assistant", content: `Voice note received! I have factored your audio query into your growth trajectory and financial models. 📈` }
+          { role: "assistant", content: `Voice note mil gayi! Bilkul sahi point uthaya hai tune. Let's incorporate this into your growth strategy model. 📈` }
         ]);
       }, 3000);
     } else {
@@ -242,7 +249,7 @@ export default function Home() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask a question or type 'trajectory'..."
+                  placeholder="Chat naturally in English, Hindi or Hinglish..."
                   className="w-full bg-[#0a071e] border border-purple-900/50 rounded-xl py-3 pl-4 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition"
                 />
                 <button
