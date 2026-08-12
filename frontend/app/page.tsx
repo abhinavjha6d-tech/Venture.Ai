@@ -91,30 +91,33 @@ export default function Home() {
       Current user telemetry context: Target MRR is ₹${targetMrr}, Active Users are ${activeUsers}, CAC is ₹${cac}, ARPU is ₹${arpu}. 
       Keep your tone conversational, motivating, and smart. Avoid robotic or pre-fed templates; think dynamically like an expert co-founder.`;
 
-      let imagePart = null;
+      let filePart = null;
 
-      // If an image is attached, convert it to base64 so Gemini can process it
-      if (currentAttachment && currentAttachment.type.startsWith("image/")) {
+      // If any file (Image, PDF, Document, Audio, etc.) is attached, convert it to base64 so Gemini can process it directly
+      if (currentAttachment) {
         const base64Data = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve((reader.result as string).split(",")[1]);
           reader.readAsDataURL(currentAttachment);
         });
 
-        imagePart = {
+        filePart = {
           inlineData: {
             data: base64Data,
-            mimeType: currentAttachment.type,
+            mimeType: currentAttachment.type || "application/octet-stream",
           },
         };
       }
 
       // Format conversation history and handle multimodal parts for Gemini SDK
       const contents = updatedMessages.map((msg, index) => {
-        if (index === updatedMessages.length - 1 && imagePart) {
+        if (index === updatedMessages.length - 1 && filePart) {
           return {
             role: "user",
-            parts: [{ text: userText || "Analyze this image for my startup." }, imagePart],
+            parts: [
+              { text: userText || `Please analyze this attached file (${currentAttachment?.name}) for my startup strategy.` }, 
+              filePart
+            ],
           };
         }
         return {
@@ -159,7 +162,7 @@ export default function Home() {
     if (!isRecording) {
       try {
         const recognition = new SpeechRecognition();
-        recognition.lang = 'en-US'; // Supports multi-lingual speech transcription depending on browser engine
+        recognition.lang = 'en-US';
         recognition.interimResults = false;
         recognition.maxAlternatives = 1;
 
@@ -293,7 +296,7 @@ export default function Home() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="bg-[#0a071e] hover:bg-purple-950/50 border border-purple-900/50 p-3 rounded-xl text-purple-400 transition"
-                title="Attach file"
+                title="Attach any file (Image, PDF, Audio, etc.)"
               >
                 <Paperclip size={18} />
               </button>
