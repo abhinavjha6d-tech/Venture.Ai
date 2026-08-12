@@ -9,7 +9,6 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-// Initialize Gemini API client (Make sure NEXT_PUBLIC_GEMINI_API_KEY is set in your environment variables)
 const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || "" });
 
 export default function Home() {
@@ -20,7 +19,6 @@ export default function Home() {
   const [authError, setAuthError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
 
-  // Chat and Simulator states
   const [messages, setMessages] = useState([
     { role: "assistant", content: "Hey! 👋 I'm Venture AI, your friendly startup advisor and decision partner. What's on your mind today — brainstorming an idea, working through a tough business decision, or figuring out your next growth step?" }
   ]);
@@ -30,11 +28,12 @@ export default function Home() {
   const [cac, setCac] = useState(50);
   const [arpu, setArpu] = useState(100);
   
-  // Voice & Attachment states
   const [isRecording, setIsRecording] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<any>(null);
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -69,53 +68,63 @@ export default function Home() {
     await supabase.auth.signOut();
   };
 
-  const handleSendMessage = async (e?: React.FormEvent, customText?: string) => {
+  const handleSendMessage = async (e?: React.FormEvent, customText?: string, overrideFile?: File | null) => {
     if (e) e.preventDefault();
     
     const textToSend = customText !== undefined ? customText : input;
-    if (!textToSend.trim() && !attachment) return;
+    const fileToProcess = overrideFile !== undefined ? overrideFile : attachment;
+
+    if (!textToSend.trim() && !fileToProcess) return;
+
+    // Check for unsupported docx format
+    if (fileToProcess && fileToProcess.name.endsWith(".docx")) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: `[Uploaded file: ${fileToProcess.name}]` },
+        { role: "assistant", content: "⚠️ Gemini API doesn't support direct reading of `.docx` Word files yet. Please save or export your document as a **PDF** or text file, then upload it again!" }
+      ]);
+      setAttachment(null);
+      if (customText === undefined) setInput("");
+      return;
+    }
 
     const userText = textToSend.trim();
-    const currentAttachment = attachment;
     if (customText === undefined) setInput("");
     setAttachment(null);
     
-    const displayMessage = userText || (currentAttachment ? `[Uploaded file: ${currentAttachment.name}]` : "");
+    const displayMessage = userText || (fileToProcess ? `[Uploaded file: ${fileToProcess.name}]` : "");
     const updatedMessages = [...messages, { role: "user", content: displayMessage }];
     setMessages(updatedMessages);
 
     try {
-      // Real dynamic Gemini API integration acting as a friendly startup advisor
       const systemInstruction = `You are Venture AI, a friendly, sharp, and supportive startup advisor and decision helper. 
       You speak naturally, match the user's language style (English, Hindi, or Hinglish seamlessly based on their prompt), and give practical, actionable startup, product, and growth advice. 
       Current user telemetry context: Target MRR is ₹${targetMrr}, Active Users are ${activeUsers}, CAC is ₹${cac}, ARPU is ₹${arpu}. 
-      Keep your tone conversational, motivating, and smart. Avoid robotic or pre-fed templates; think dynamically like an expert co-founder.`;
+      Keep your tone conversational, motivating, and smart. Avoid robotic templates; think dynamically like an expert co-founder.`;
 
       let filePart = null;
 
-      // If any file (Image, PDF, Document, Audio, etc.) is attached, convert it to base64 so Gemini can process it directly
-      if (currentAttachment) {
+      if (fileToProcess) {
         const base64Data = await new Promise<string>((resolve) => {
           const reader = new FileReader();
           reader.onload = () => resolve((reader.result as string).split(",")[1]);
-          reader.readAsDataURL(currentAttachment);
+          reader.readAsDataURL(fileToProcess);
         });
 
         filePart = {
           inlineData: {
             data: base64Data,
-            mimeType: currentAttachment.type || "application/octet-stream",
+            mimeType: fileToProcess.type || "application/octet-stream",
           },
         };
       }
 
-      // Format conversation history and handle multimodal parts for Gemini SDK
       const contents = updatedMessages.map((msg, index) => {
         if (index === updatedMessages.length - 1 && filePart) {
           return {
             role: "user",
             parts: [
-              { text: userText || `Please analyze this attached file (${currentAttachment?.name}) for my startup strategy.` }, 
+              { text: userText || `Please review and analyze this attached file (${fileToProcess?.name}) for my startup strategy.` }, 
               filePart
             ],
           };
@@ -143,59 +152,47 @@ export default function Home() {
       ]);
     } catch (error) {
       console.error("Gemini API Error:", error);
-      // Fallback response if API key isn't active or network fails
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Arre, lagta hai network connection mein thoda hiccup aa gaya! Par baat clear hai—apne startup ke is milestone ko achieve karne ke liye batao next step kya socha hai?" }
+        { role: "assistant", content: "Oops! File processing encountered an issue. Make sure your file is a supported format (PDF, Image, Audio, or Text) and try again!" }
       ]);
     }
   };
 
-  const toggleRecording = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    
-    if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser. Try using Chrome.");
-      return;
-    }
-
+  // Real Audio Recorder using MediaRecorder API (Sends audio recording directly to Gemini)
+  const toggleRecording = async () => {
     if (!isRecording) {
       try {
-        const recognition = new SpeechRecognition();
-        recognition.lang = 'en-US';
-        recognition.interimResults = false;
-        recognition.maxAlternatives = 1;
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = mediaRecorder;
+        audioChunksRef.current = [];
 
-        recognition.onstart = () => {
-          setIsRecording(true);
-        };
-
-        recognition.onresult = (event: any) => {
-          const speechText = event.results[0][0].transcript;
-          setIsRecording(false);
-          if (speechText) {
-            handleSendMessage(undefined, speechText);
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
           }
         };
 
-        recognition.onerror = (event: any) => {
-          console.error("Speech recognition error", event.error);
-          setIsRecording(false);
+        mediaRecorder.onstop = async () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+          const audioFile = new File([audioBlob], "voice_note.webm", { type: 'audio/webm' });
+          handleSendMessage(undefined, "Please listen to this voice note and respond to my query:", audioFile);
+          
+          // Stop mic tracks
+          stream.getTracks().forEach(track => track.stop());
         };
 
-        recognition.onend = () => {
-          setIsRecording(false);
-        };
-
-        recognitionRef.current = recognition;
-        recognition.start();
+        mediaRecorder.start();
+        setIsRecording(true);
       } catch (err) {
-        console.error("Failed to start recording:", err);
+        console.error("Microphone permission error:", err);
+        alert("Microphone access was denied or is not supported in this browser.");
         setIsRecording(false);
       }
     } else {
-      if (recognitionRef.current) {
-        recognitionRef.current.stop();
+      if (mediaRecorderRef.current && isRecording) {
+        mediaRecorderRef.current.stop();
       }
       setIsRecording(false);
     }
@@ -220,7 +217,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* AUTHENTICATION BADGE / SIGN OUT BUTTON */}
         <div>
           {session ? (
             <div className="flex items-center gap-3 bg-[#120F29] border border-purple-900/50 px-4 py-2 rounded-2xl shadow-lg">
@@ -296,7 +292,7 @@ export default function Home() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="bg-[#0a071e] hover:bg-purple-950/50 border border-purple-900/50 p-3 rounded-xl text-purple-400 transition"
-                title="Attach any file (Image, PDF, Audio, etc.)"
+                title="Attach PDF, Image, or Audio file"
               >
                 <Paperclip size={18} />
               </button>
@@ -305,7 +301,7 @@ export default function Home() {
                 type="button"
                 onClick={toggleRecording}
                 className={`border p-3 rounded-xl transition ${isRecording ? "bg-red-500/20 border-red-500 text-red-400 animate-pulse" : "bg-[#0a071e] hover:bg-purple-950/50 border-purple-900/50 text-purple-400"}`}
-                title="Record Voice Note"
+                title={isRecording ? "Stop recording voice note" : "Record voice note"}
               >
                 {isRecording ? <Square size={18} /> : <Mic size={18} />}
               </button>
@@ -331,7 +327,6 @@ export default function Home() {
           {/* RIGHT COLUMN: METRICS, LIVE GRAPH & SIMULATOR */}
           <div className="flex flex-col gap-6">
             
-            {/* Telemetry Matrices Header Card */}
             <div className="bg-[#120F29]/90 border border-purple-900/50 rounded-3xl p-6 shadow-xl backdrop-blur-xl">
               <div className="flex justify-between items-center mb-4">
                 <div>
@@ -363,7 +358,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* LIVE REVENUE & LTV TRAJECTORY GRAPH CARD */}
             <div className="bg-[#120F29]/90 border border-purple-900/50 rounded-3xl p-6 shadow-xl backdrop-blur-xl">
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center gap-2">
@@ -408,7 +402,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* FINANCIAL MODELING SIMULATOR SLIDERS */}
             <div className="bg-[#120F29]/90 border border-purple-900/50 rounded-3xl p-6 shadow-xl backdrop-blur-xl">
               <div className="flex items-center gap-2 text-purple-400 mb-4 border-b border-purple-900/40 pb-3">
                 <Activity size={18} />
