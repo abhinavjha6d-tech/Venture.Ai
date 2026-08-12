@@ -34,6 +34,7 @@ export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const recognitionRef = useRef<any>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -68,30 +69,59 @@ export default function Home() {
     await supabase.auth.signOut();
   };
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() && !attachment) return;
+  const handleSendMessage = async (e?: React.FormEvent, customText?: string) => {
+    if (e) e.preventDefault();
+    
+    const textToSend = customText !== undefined ? customText : input;
+    if (!textToSend.trim() && !attachment) return;
 
-    const userText = input.trim();
-    const userMessage = userText || (attachment ? `[Uploaded file: ${attachment.name}]` : "");
-    setInput("");
+    const userText = textToSend.trim();
+    const currentAttachment = attachment;
+    if (customText === undefined) setInput("");
     setAttachment(null);
     
-    const updatedMessages = [...messages, { role: "user", content: userMessage }];
+    const displayMessage = userText || (currentAttachment ? `[Uploaded file: ${currentAttachment.name}]` : "");
+    const updatedMessages = [...messages, { role: "user", content: displayMessage }];
     setMessages(updatedMessages);
 
     try {
       // Real dynamic Gemini API integration acting as a friendly startup advisor
-      const systemInstruction = `You are Ventura AI, a friendly, sharp, and supportive startup advisor and decision helper. 
+      const systemInstruction = `You are Venture AI, a friendly, sharp, and supportive startup advisor and decision helper. 
       You speak naturally, match the user's language style (English, Hindi, or Hinglish seamlessly based on their prompt), and give practical, actionable startup, product, and growth advice. 
       Current user telemetry context: Target MRR is ₹${targetMrr}, Active Users are ${activeUsers}, CAC is ₹${cac}, ARPU is ₹${arpu}. 
       Keep your tone conversational, motivating, and smart. Avoid robotic or pre-fed templates; think dynamically like an expert co-founder.`;
 
-      // Format conversation history for Gemini SDK
-      const contents = updatedMessages.map(msg => ({
-        role: msg.role === "assistant" ? "model" : "user",
-        parts: [{ text: msg.content }]
-      }));
+      let imagePart = null;
+
+      // If an image is attached, convert it to base64 so Gemini can process it
+      if (currentAttachment && currentAttachment.type.startsWith("image/")) {
+        const base64Data = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve((reader.result as string).split(",")[1]);
+          reader.readAsDataURL(currentAttachment);
+        });
+
+        imagePart = {
+          inlineData: {
+            data: base64Data,
+            mimeType: currentAttachment.type,
+          },
+        };
+      }
+
+      // Format conversation history and handle multimodal parts for Gemini SDK
+      const contents = updatedMessages.map((msg, index) => {
+        if (index === updatedMessages.length - 1 && imagePart) {
+          return {
+            role: "user",
+            parts: [{ text: userText || "Analyze this image for my startup." }, imagePart],
+          };
+        }
+        return {
+          role: msg.role === "assistant" ? "model" : "user",
+          parts: [{ text: msg.content }],
+        };
+      });
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
@@ -119,18 +149,51 @@ export default function Home() {
   };
 
   const toggleRecording = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    
+    if (!SpeechRecognition) {
+      alert("Speech recognition is not supported in this browser. Try using Chrome.");
+      return;
+    }
+
     if (!isRecording) {
-      setIsRecording(true);
-      setMessages((prev) => [...prev, { role: "assistant", content: "Listening closely... Go ahead, spill your thoughts! 🎙️" }]);
-      setTimeout(() => {
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'en-US'; // Supports multi-lingual speech transcription depending on browser engine
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+
+        recognition.onstart = () => {
+          setIsRecording(true);
+        };
+
+        recognition.onresult = (event: any) => {
+          const speechText = event.results[0][0].transcript;
+          setIsRecording(false);
+          if (speechText) {
+            handleSendMessage(undefined, speechText);
+          }
+        };
+
+        recognition.onerror = (event: any) => {
+          console.error("Speech recognition error", event.error);
+          setIsRecording(false);
+        };
+
+        recognition.onend = () => {
+          setIsRecording(false);
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+      } catch (err) {
+        console.error("Failed to start recording:", err);
         setIsRecording(false);
-        setMessages((prev) => [...prev, { role: "user", content: "[Voice Note Recorded]" }]);
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: `Voice note mil gayi! Bilkul sahi point uthaya hai tune. Let's incorporate this into your growth strategy model. 📈` }
-        ]);
-      }, 3000);
+      }
     } else {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
       setIsRecording(false);
     }
   };
@@ -219,7 +282,7 @@ export default function Home() {
               </div>
             )}
 
-            <form onSubmit={handleSendMessage} className="relative mt-auto flex items-center gap-2">
+            <form onSubmit={(e) => handleSendMessage(e)} className="relative mt-auto flex items-center gap-2">
               <input 
                 type="file" 
                 ref={fileInputRef} 
