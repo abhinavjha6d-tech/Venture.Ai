@@ -76,12 +76,13 @@ export default function Home() {
 
     if (!textToSend.trim() && !fileToProcess) return;
 
-    // Check for unsupported docx format
-    if (fileToProcess && fileToProcess.name.endsWith(".docx")) {
+    // Check for unsupported Office formats (.docx, .pptx, .xlsx)
+    if (fileToProcess && (fileToProcess.name.endsWith(".docx") || fileToProcess.name.endsWith(".pptx") || fileToProcess.name.endsWith(".xlsx"))) {
+      const fileTypeLabel = fileToProcess.name.endsWith(".pptx") ? "PowerPoint (.pptx)" : fileToProcess.name.endsWith(".docx") ? "Word (.docx)" : "Excel (.xlsx)";
       setMessages((prev) => [
         ...prev,
         { role: "user", content: `[Uploaded file: ${fileToProcess.name}]` },
-        { role: "assistant", content: "⚠️ Gemini API doesn't support direct reading of `.docx` Word files yet. Please save or export your document as a **PDF** or text file, then upload it again!" }
+        { role: "assistant", content: `⚠️ Gemini API doesn't support direct reading of ${fileTypeLabel} files yet. Please export your presentation or document as a **PDF** or text file, then upload it!` }
       ]);
       setAttachment(null);
       if (customText === undefined) setInput("");
@@ -159,7 +160,6 @@ export default function Home() {
     }
   };
 
-  // Real Audio Recorder using MediaRecorder API (Sends audio recording directly to Gemini)
   const toggleRecording = async () => {
     if (!isRecording) {
       try {
@@ -179,7 +179,6 @@ export default function Home() {
           const audioFile = new File([audioBlob], "voice_note.webm", { type: 'audio/webm' });
           handleSendMessage(undefined, "Please listen to this voice note and respond to my query:", audioFile);
           
-          // Stop mic tracks
           stream.getTracks().forEach(track => track.stop());
         };
 
@@ -201,7 +200,6 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-[#070514] text-white p-4 md:p-8 font-sans selection:bg-purple-500 selection:text-white">
       
-      {/* CUSTOM LOGO HEADER */}
       <header className="flex justify-between items-center mb-8 border-b border-purple-900/40 pb-4">
         <div className="flex items-center gap-3">
           <img 
@@ -240,11 +238,9 @@ export default function Home() {
         </div>
       </header>
 
-      {/* MAIN CONTAINER */}
       {session ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           
-          {/* LEFT COLUMN: CHAT STREAM */}
           <div className="bg-[#120F29]/90 border border-purple-900/50 rounded-3xl p-5 flex flex-col h-[680px] shadow-2xl backdrop-blur-xl">
             <div className="flex items-center justify-between mb-4 border-b border-purple-900/40 pb-3">
               <div className="flex items-center gap-2 text-purple-400">
@@ -324,7 +320,6 @@ export default function Home() {
             </form>
           </div>
 
-          {/* RIGHT COLUMN: METRICS, LIVE GRAPH & SIMULATOR */}
           <div className="flex flex-col gap-6">
             
             <div className="bg-[#120F29]/90 border border-purple-900/50 rounded-3xl p-6 shadow-xl backdrop-blur-xl">
