@@ -3,13 +3,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Paperclip, Mic, Square, Send, X, Sparkles, Activity, LogOut, ShieldCheck, User, Loader2 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
-import { GoogleGenAI } from "@google/genai";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
-const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY || "" });
 
 export default function Home() {
   const [session, setSession] = useState<any>(null);
@@ -114,7 +111,6 @@ export default function Home() {
       const file = e.target.files[0];
       setIsUploadingFile(true);
       
-      // Simulate checking and fully loading the file preview securely like Gemini
       setTimeout(() => {
         setAttachment(file);
         setIsUploadingFile(false);
@@ -131,7 +127,6 @@ export default function Home() {
 
     if (!textToSend.trim() && !fileToProcess) return;
 
-    // Check for unsupported Office formats
     if (fileToProcess && (fileToProcess.name.endsWith(".docx") || fileToProcess.name.endsWith(".pptx") || fileToProcess.name.endsWith(".xlsx"))) {
       const fileTypeLabel = fileToProcess.name.endsWith(".pptx") ? "PowerPoint (.pptx)" : fileToProcess.name.endsWith(".docx") ? "Word (.docx)" : "Excel (.xlsx)";
       setMessages((prev) => [
@@ -185,23 +180,24 @@ export default function Home() {
       });
 
       setLoadingStepText("Generating response...");
-      const response = await ai.models.generateContent({
-        model: 'gemini-1.5-flash',
-        contents: contents,
-        config: {
-          systemInstruction: systemInstruction,
-          temperature: 0.7,
-        }
+      
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents, systemInstruction }),
       });
 
-      const reply = response.text || "Acha sawaal hai! Isko aur detail mein analyze karte hain. Batao aage kya plan hai?";
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to fetch response");
+
+      const reply = data.text || "Acha sawaal hai! Isko aur detail mein analyze karte hain. Batao aage kya plan hai?";
 
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: reply }
       ]);
     } catch (error) {
-      console.error("Gemini API Error:", error);
+      console.error("API Error:", error);
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "Oops! File processing encountered an issue. Make sure your file is a supported format (PDF, Image, Audio, or Text) and try again!" }
@@ -330,7 +326,6 @@ export default function Home() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* FILE UPLOADING / PROCESSING REMINDER & PREVIEW CONTAINER */}
             {isUploadingFile && (
               <div className="flex items-center gap-3 bg-purple-950/80 border border-purple-700/60 p-3 rounded-2xl mb-3 text-xs shadow-lg animate-pulse">
                 <Loader2 size={16} className="animate-spin text-purple-400" />
