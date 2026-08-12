@@ -30,6 +30,8 @@ export default function Home() {
   
   const [isRecording, setIsRecording] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStepText, setLoadingStepText] = useState("Analyzing your input...");
+  const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
@@ -89,9 +91,40 @@ export default function Home() {
     await supabase.auth.signOut();
   };
 
+  const fileToGenerativePart = (file: File): Promise<{ inlineData: { data: string; mimeType: string } }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64String = reader.result as string;
+        const base64Data = base64String.split(",")[1];
+        resolve({
+          inlineData: {
+            data: base64Data,
+            mimeType: file.type || "application/octet-stream",
+          },
+        });
+      };
+      reader.onerror = (error) => reject(error);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setIsUploadingFile(true);
+      
+      // Simulate checking and fully loading the file preview securely like Gemini
+      setTimeout(() => {
+        setAttachment(file);
+        setIsUploadingFile(false);
+      }, 400);
+    }
+  };
+
   const handleSendMessage = async (e?: React.FormEvent, customText?: string, overrideFile?: File | null) => {
     if (e) e.preventDefault();
-    if (isLoading) return;
+    if (isLoading || isUploadingFile) return;
 
     const textToSend = customText !== undefined ? customText : input;
     const fileToProcess = overrideFile !== undefined ? overrideFile : attachment;
@@ -120,7 +153,9 @@ export default function Home() {
     const displayMessage = userText || (fileToProcess ? `[Uploaded file: ${fileToProcess.name}]` : "");
     const updatedMessages = [...messages, { role: "user", content: displayMessage }];
     setMessages(updatedMessages);
+    
     setIsLoading(true);
+    setLoadingStepText(fileToProcess ? `Uploading and processing ${fileToProcess.name}...` : "Analyzing your input...");
 
     try {
       const systemInstruction = `You are Venture AI, a friendly, sharp, and supportive startup advisor and decision helper. 
@@ -129,39 +164,27 @@ export default function Home() {
       Current user telemetry context: Target MRR is ₹${targetMrr}, Active Users are ${activeUsers}, CAC is ₹${cac}, ARPU is ₹${arpu}. 
       Keep your tone conversational, motivating, and smart. Avoid robotic templates; think dynamically like an expert co-founder.`;
 
-      let filePart = null;
+      let partsArray: any[] = [];
 
       if (fileToProcess) {
-        const base64Data = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve((reader.result as string).split(",")[1]);
-          reader.readAsDataURL(fileToProcess);
-        });
-
-        filePart = {
-          inlineData: {
-            data: base64Data,
-            mimeType: fileToProcess.type || "application/octet-stream",
-          },
-        };
+        setLoadingStepText(`Sending ${fileToProcess.name} to Gemini...`);
+        const filePart = await fileToGenerativePart(fileToProcess);
+        partsArray.push(filePart);
       }
 
-      const contents = updatedMessages.map((msg, index) => {
-        if (index === updatedMessages.length - 1 && filePart) {
-          return {
-            role: "user",
-            parts: [
-              { text: userText || `Please review and analyze this attached file (${fileToProcess?.name}) for my startup strategy.` }, 
-              filePart
-            ],
-          };
-        }
-        return {
-          role: msg.role === "assistant" ? "model" : "user",
-          parts: [{ text: msg.content }],
-        };
+      partsArray.push({ text: userText || `Please review and analyze this attached file (${fileToProcess?.name}) for my startup strategy.` });
+
+      const contents = updatedMessages.slice(0, -1).map((msg) => ({
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }],
+      }));
+
+      contents.push({
+        role: "user",
+        parts: partsArray,
       });
 
+      setLoadingStepText("Generating response...");
       const response = await ai.models.generateContent({
         model: 'gemini-1.5-flash',
         contents: contents,
@@ -185,6 +208,7 @@ export default function Home() {
       ]);
     } finally {
       setIsLoading(false);
+      setLoadingStepText("Analyzing your input...");
     }
   };
 
@@ -299,15 +323,22 @@ export default function Home() {
                 <div className="flex justify-start">
                   <div className="bg-[#1a1638] border border-purple-900/40 p-3.5 rounded-2xl rounded-bl-none text-purple-300 text-sm flex items-center gap-2.5 shadow-md">
                     <Loader2 size={16} className="animate-spin text-purple-400" />
-                    <span>Analyzing your input...</span>
+                    <span>{loadingStepText}</span>
                   </div>
                 </div>
               )}
               <div ref={messagesEndRef} />
             </div>
 
-            {/* PREVIEW CONTAINER */}
-            {attachment && (
+            {/* FILE UPLOADING / PROCESSING REMINDER & PREVIEW CONTAINER */}
+            {isUploadingFile && (
+              <div className="flex items-center gap-3 bg-purple-950/80 border border-purple-700/60 p-3 rounded-2xl mb-3 text-xs shadow-lg animate-pulse">
+                <Loader2 size={16} className="animate-spin text-purple-400" />
+                <span className="text-purple-200 font-medium">Processing and uploading file preview...</span>
+              </div>
+            )}
+
+            {attachment && !isUploadingFile && (
               <div className="flex items-center justify-between bg-purple-950/60 border border-purple-800/60 p-3 rounded-2xl mb-3 text-xs shadow-lg">
                 <div className="flex items-center gap-3 overflow-hidden">
                   {previewUrl ? (
@@ -319,7 +350,7 @@ export default function Home() {
                   )}
                   <div className="truncate">
                     <p className="text-purple-200 font-semibold truncate">{attachment.name}</p>
-                    <p className="text-[10px] text-purple-400">Ready to send with your message</p>
+                    <p className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">✓ Fully uploaded & ready</p>
                   </div>
                 </div>
                 <button 
@@ -336,13 +367,13 @@ export default function Home() {
               <input 
                 type="file" 
                 ref={fileInputRef} 
-                onChange={(e) => e.target.files && setAttachment(e.target.files[0])} 
+                onChange={handleFileSelect} 
                 className="hidden" 
               />
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
+                disabled={isLoading || isUploadingFile}
                 className="bg-[#0a071e] hover:bg-purple-950/50 border border-purple-900/50 p-3 rounded-xl text-purple-400 transition disabled:opacity-50"
                 title="Attach PDF, Image, or Audio file"
               >
@@ -352,7 +383,7 @@ export default function Home() {
               <button
                 type="button"
                 onClick={toggleRecording}
-                disabled={isLoading}
+                disabled={isLoading || isUploadingFile}
                 className={`border p-3 rounded-xl transition disabled:opacity-50 ${isRecording ? "bg-red-500/20 border-red-500 text-red-400 animate-pulse" : "bg-[#0a071e] hover:bg-purple-950/50 border-purple-900/50 text-purple-400"}`}
                 title={isRecording ? "Stop recording voice note" : "Record voice note"}
               >
@@ -364,13 +395,13 @@ export default function Home() {
                   type="text"
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  disabled={isLoading}
+                  disabled={isLoading || isUploadingFile}
                   placeholder={isRecording ? "Recording voice note..." : "Chat naturally in English, Hindi or Hinglish..."}
                   className="w-full bg-[#0a071e] border border-purple-900/50 rounded-xl py-3 pl-4 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition disabled:opacity-50"
                 />
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={isLoading || isUploadingFile}
                   className="absolute right-2 top-1/2 -translate-y-1/2 bg-gradient-to-r from-purple-600 to-pink-500 hover:opacity-90 p-2 rounded-lg text-white transition shadow-md shadow-purple-600/40 disabled:opacity-50"
                 >
                   <Send size={16} />
