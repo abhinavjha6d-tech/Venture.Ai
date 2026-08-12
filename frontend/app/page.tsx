@@ -8,7 +8,7 @@ import AboutUs from "@/app/pages/AboutUs";
 import FAQ from "@/app/pages/FAQ";
 import Pricing from "@/app/pages/Pricing";
 import ContactUs from "@/app/pages/ContactUs";
-import { HistoryPage, ProjectsPage } from "@/app/pages/HistoryAndProjects";
+import { HistoryPage } from "@/app/pages/HistoryAndProjects";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -423,7 +423,6 @@ export default function Home() {
             {currentView === "pricing" && <Pricing />}
             {currentView === "contact" && <ContactUs />}
             {currentView === "history" && <HistoryPage chatHistory={chatHistory} />}
-            {currentView === "projects" && <ProjectsPage />}
           </div>
         ) : (
           <div className="max-w-md mx-auto mt-16 bg-[#120F29]/90 border border-purple-900/60 rounded-3xl p-8 shadow-2xl backdrop-blur-2xl">
