@@ -67,6 +67,22 @@ export default function Home() {
     return () => subscription.unsubscribe();
   }, []);
 
+  // Fetch chat history from Supabase when session changes
+  useEffect(() => {
+    if (session?.user?.id) {
+      supabase
+        .from("chat_history")
+        .select("*")
+        .eq("user_id", session.user.id)
+        .order("created_at", { ascending: true })
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            setMessages(data.map((m: any) => ({ role: m.role, content: m.content })));
+          }
+        });
+    }
+  }, [session]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
@@ -144,11 +160,22 @@ export default function Home() {
 
     if (fileToProcess && (fileToProcess.name.endsWith(".docx") || fileToProcess.name.endsWith(".pptx") || fileToProcess.name.endsWith(".xlsx"))) {
       const fileTypeLabel = fileToProcess.name.endsWith(".pptx") ? "PowerPoint (.pptx)" : fileToProcess.name.endsWith(".docx") ? "Word (.docx)" : "Excel (.xlsx)";
+      const errorReply = `⚠️ Gemini API doesn't support direct reading of ${fileTypeLabel} files yet. Please export your file as a **PDF** or text file, then upload it!`;
+      
       setMessages((prev) => [
         ...prev,
         { role: "user", content: `[Uploaded file: ${fileToProcess.name}]` },
-        { role: "assistant", content: `⚠️ Gemini API doesn't support direct reading of ${fileTypeLabel} files yet. Please export your file as a **PDF** or text file, then upload it!` }
+        { role: "assistant", content: errorReply }
       ]);
+
+      const userId = session?.user?.id;
+      if (userId) {
+        await supabase.from("chat_history").insert([
+          { user_id: userId, role: "user", content: `[Uploaded file: ${fileToProcess.name}]` },
+          { user_id: userId, role: "assistant", content: errorReply }
+        ]);
+      }
+
       setAttachment(null);
       setPreviewUrl(null);
       if (customText === undefined) setInput("");
@@ -164,6 +191,14 @@ export default function Home() {
     const updatedMessages = [...messages, { role: "user", content: displayMessage }];
     setMessages(updatedMessages);
     
+    // Save user message to Supabase
+    const userId = session?.user?.id;
+    if (userId) {
+      await supabase.from("chat_history").insert([
+        { user_id: userId, role: "user", content: displayMessage }
+      ]);
+    }
+
     setIsLoading(true);
     setLoadingStepText(fileToProcess ? `Uploading and processing ${fileToProcess.name}...` : "Analyzing your input...");
 
@@ -201,9 +236,22 @@ export default function Home() {
       const reply = data.text || "Acha sawaal hai! Isko aur detail mein analyze karte hain.";
 
       setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
+
+      // Save assistant reply to Supabase
+      if (userId) {
+        await supabase.from("chat_history").insert([
+          { user_id: userId, role: "assistant", content: reply }
+        ]);
+      }
     } catch (error) {
       console.error("API Error:", error);
-      setMessages((prev) => [...prev, { role: "assistant", content: "Oops! File processing encountered an issue. Try again!" }]);
+      const errorMsg = "Oops! File processing encountered an issue. Try again!";
+      setMessages((prev) => [...prev, { role: "assistant", content: errorMsg }]);
+      if (userId) {
+        await supabase.from("chat_history").insert([
+          { user_id: userId, role: "assistant", content: errorMsg }
+        ]);
+      }
     } finally {
       setIsLoading(false);
       setLoadingStepText("Analyzing your input...");
@@ -436,12 +484,10 @@ export default function Home() {
                         <div className="flex justify-between items-center mb-2"><label className="text-xs font-semibold text-gray-300">Active Users</label><span className="text-purple-400 font-bold text-sm">{activeUsers}</span></div>
                         <input type="range" min="50" max="10000" step="50" value={activeUsers} onChange={(e) => setActiveUsers(Number(e.target.value))} className="w-full accent-purple-500 cursor-pointer" />
                       </div>
-                      {/* CAC Slider */}
                       <div className="bg-[#0a071e] p-4 rounded-2xl border border-purple-900/30">
                         <div className="flex justify-between items-center mb-2"><label className="text-xs font-semibold text-gray-300">CAC</label><span className="text-pink-400 font-bold text-sm">₹{cac}</span></div>
                         <input type="range" min="10" max="2000" step="10" value={cac} onChange={(e) => setCac(Number(e.target.value))} className="w-full accent-pink-500 cursor-pointer" />
                       </div>
-                      {/* ARPU Slider */}
                       <div className="bg-[#0a071e] p-4 rounded-2xl border border-purple-900/30">
                         <div className="flex justify-between items-center mb-2"><label className="text-xs font-semibold text-gray-300">ARPU</label><span className="text-purple-400 font-bold text-sm">₹{arpu}</span></div>
                         <input type="range" min="10" max="5000" step="50" value={arpu} onChange={(e) => setArpu(Number(e.target.value))} className="w-full accent-purple-500 cursor-pointer" />
