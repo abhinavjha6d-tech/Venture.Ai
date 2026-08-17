@@ -3,12 +3,15 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Paperclip, Mic, Square, Send, X, Sparkles, Activity, LogOut, ShieldCheck, User, Loader2 } from "lucide-react";
 import { createClient } from "@supabase/supabase-js";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import Sidebar from "@/components/Sidebar";
 import AboutUs from "@/app/pages/AboutUs";
 import FAQ from "@/app/pages/FAQ";
 import Pricing from "@/app/pages/Pricing";
 import ContactUs from "@/app/pages/ContactUs";
 import { HistoryPage } from "@/app/pages/HistoryAndProjects";
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
@@ -310,8 +313,29 @@ export default function Home() {
                   <div className="flex-1 overflow-y-auto space-y-4 pr-2 mb-4 scrollbar-thin scrollbar-thumb-purple-900">
                     {messages.map((msg, index) => (
                       <div key={index} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-                        <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed ${msg.role === "user" ? "bg-purple-600 text-white rounded-br-none shadow-lg shadow-purple-600/20" : "bg-[#1a1638] border border-purple-900/40 text-gray-200 rounded-bl-none"}`}>
-                          {msg.content}
+                        <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${
+                          msg.role === "user" 
+                            ? "bg-purple-600 text-white rounded-br-none shadow-lg shadow-purple-600/20" 
+                            : "bg-[#1a1638] border border-purple-900/40 text-gray-200 rounded-bl-none prose prose-invert max-w-none"
+                        }`}>
+                          {msg.role === "user" ? (
+                            msg.content
+                          ) : (
+                            <ReactMarkdown 
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                p: ({node, ...props}) => <p className="mb-3 last:mb-0 leading-relaxed" {...props} />,
+                                strong: ({node, ...props}) => <strong className="font-bold text-purple-300" {...props} />,
+                                ul: ({node, ...props}) => <ul className="list-disc pl-5 mb-3 space-y-1.5" {...props} />,
+                                ol: ({node, ...props}) => <ol className="list-decimal pl-5 mb-3 space-y-1.5" {...props} />,
+                                li: ({node, ...props}) => <li className="leading-relaxed" {...props} />,
+                                h3: ({node, ...props}) => <h3 className="text-base font-bold text-purple-300 mt-4 mb-2" {...props} />,
+                                blockquote: ({node, ...props}) => <blockquote className="border-l-2 border-purple-500 pl-3 italic my-2 text-purple-200" {...props} />,
+                              }}
+                            >
+                              {msg.content}
+                            </ReactMarkdown>
+                          )}
                         </div>
                       </div>
                     ))}
