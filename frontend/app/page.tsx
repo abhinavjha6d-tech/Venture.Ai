@@ -215,6 +215,7 @@ export default function Home() {
 
       partsArray.push({ text: userText || `Please review and analyze this attached file (${fileToProcess?.name}) for my startup strategy.` });
 
+      // Clean mapping ensuring alternating roles and proper content format for Gemini
       const contents = updatedMessages.slice(0, -1).map((msg) => ({
         role: msg.role === "assistant" ? "model" : "user",
         parts: [{ text: msg.content }],
